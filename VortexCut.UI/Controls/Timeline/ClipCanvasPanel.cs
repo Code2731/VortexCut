@@ -1110,6 +1110,28 @@ public class ClipCanvasPanel : Control
 
         double x = TimeToX(_viewModel.CurrentTimeMs);
 
+        // 재생 중일 때 글로우 효과 (펄스 애니메이션)
+        if (_viewModel.IsPlaying)
+        {
+            double glowIntensity = 0.5 + (Math.Sin(_selectionPulsePhase * 2) * 0.5 + 0.5) * 0.5;
+
+            // 외부 글로우 (더 넓고 약함)
+            var outerGlowPen = new Pen(
+                new SolidColorBrush(Color.FromArgb((byte)(glowIntensity * 100), 255, 80, 80)),
+                8);
+            context.DrawLine(outerGlowPen,
+                new Point(x, 0),
+                new Point(x, Bounds.Height));
+
+            // 중간 글로우
+            var midGlowPen = new Pen(
+                new SolidColorBrush(Color.FromArgb((byte)(glowIntensity * 150), 255, 60, 60)),
+                5);
+            context.DrawLine(midGlowPen,
+                new Point(x, 0),
+                new Point(x, Bounds.Height));
+        }
+
         // Playhead 그림자 (깊이감)
         var shadowPen = new Pen(
             new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
@@ -1291,8 +1313,10 @@ public class ClipCanvasPanel : Control
         var typeface = new Typeface("Consolas", FontStyle.Normal, FontWeight.Normal);
         const double fontSize = 10;
 
+        var playbackStatus = _viewModel?.IsPlaying == true ? "▶ Playing" : "⏸ Paused";
         var infoLines = new[]
         {
+            playbackStatus,
             $"FPS: {_currentFps:F1}",
             $"Clips: {_clips.Count}",
             $"Tracks: {_videoTracks.Count + _audioTracks.Count}"
