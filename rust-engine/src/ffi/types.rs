@@ -9,7 +9,20 @@ pub const ERROR_NULL_PTR: i32 = 1;
 pub const ERROR_INVALID_PARAM: i32 = 2;
 pub const ERROR_FFMPEG: i32 = 3;
 pub const ERROR_IO: i32 = 4;
+pub const ERROR_RENDER_FAILED: i32 = 5;
 pub const ERROR_UNKNOWN: i32 = 99;
+
+/// 에러 코드 Enum
+#[repr(i32)]
+pub enum ErrorCode {
+    Success = 0,
+    NullPointer = 1,
+    InvalidParam = 2,
+    Ffmpeg = 3,
+    Io = 4,
+    RenderFailed = 5,
+    Unknown = 99,
+}
 
 /// C-compatible 에러 구조체
 #[repr(C)]

@@ -106,4 +106,36 @@ public static class NativeMethods
     /// </summary>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int timeline_get_audio_track_count(IntPtr timeline, out nuint outCount);
+
+    // ==================== Renderer Functions ====================
+
+    /// <summary>
+    /// Renderer 생성
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int renderer_create(IntPtr timeline, out IntPtr outRenderer);
+
+    /// <summary>
+    /// Renderer 파괴
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int renderer_destroy(IntPtr renderer);
+
+    /// <summary>
+    /// 프레임 렌더링
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int renderer_render_frame(
+        IntPtr renderer,
+        long timestampMs,
+        out uint outWidth,
+        out uint outHeight,
+        out IntPtr outData,
+        out nuint outDataSize);
+
+    /// <summary>
+    /// 렌더링된 프레임 데이터 해제
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int renderer_free_frame_data(IntPtr data, nuint size);
 }

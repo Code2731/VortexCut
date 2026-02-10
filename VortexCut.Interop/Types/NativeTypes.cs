@@ -12,6 +12,7 @@ public static class ErrorCodes
     public const int INVALID_PARAM = 2;
     public const int FFMPEG = 3;
     public const int IO = 4;
+    public const int RENDER_FAILED = 5;
     public const int UNKNOWN = 99;
 }
 

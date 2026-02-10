@@ -3,6 +3,7 @@
 
 pub mod types;
 pub mod timeline;
+pub mod renderer;
 
 use std::ffi::CString;
 use std::os::raw::c_char;
