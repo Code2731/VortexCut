@@ -73,6 +73,64 @@ public class TimelineHeader : Control
         {
             DrawMarkers(context);
         }
+
+        // 상태 정보 표시 (우측 상단)
+        DrawStatusInfo(context);
+    }
+
+    private void DrawStatusInfo(DrawingContext context)
+    {
+        if (_viewModel == null) return;
+
+        // 줌 레벨 표시
+        var zoomPercent = (int)(_pixelsPerMs * 100);
+        var zoomText = $"Zoom: {zoomPercent}%";
+
+        // 현재 시간 (프레임 번호)
+        var currentFrame = (int)(_viewModel.CurrentTimeMs * 30 / 1000); // 30fps 가정
+        var frameText = $"Frame: {currentFrame}";
+
+        // 클립 개수
+        var clipCountText = $"Clips: {_viewModel.Clips.Count}";
+
+        var typeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.SemiBold);
+        var fontSize = 10.0;
+
+        // 배경 박스 (프로페셔널 스타일)
+        var infoText = $"{zoomText}  |  {frameText}  |  {clipCountText}";
+        var text = new FormattedText(
+            infoText,
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            fontSize,
+            Brushes.White);
+
+        var textX = Bounds.Width - text.Width - 15;
+        var textY = 8;
+
+        // 배경 (그라디언트 + 테두리)
+        var bgRect = new Rect(textX - 8, textY - 4, text.Width + 16, text.Height + 8);
+        var bgGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromArgb(200, 45, 45, 48), 0),
+                new GradientStop(Color.FromArgb(220, 35, 35, 38), 1)
+            }
+        };
+        context.FillRectangle(bgGradient, bgRect);
+
+        // 테두리 (파란색 하이라이트)
+        var borderPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(150, 0, 122, 204)),
+            1);
+        context.DrawRectangle(borderPen, bgRect);
+
+        // 텍스트
+        context.DrawText(text, new Point(textX, textY));
     }
 
     private void DrawTimeRuler(DrawingContext context)
