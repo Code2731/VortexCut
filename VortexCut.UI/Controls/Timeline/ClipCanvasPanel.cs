@@ -224,9 +224,34 @@ public class ClipCanvasPanel : Control
             return;
         }
 
-        // 왼쪽 버튼: 클립 선택/드래그/트림
+        // 왼쪽 버튼: Razor 모드 또는 클립 선택/드래그/트림
         if (properties.IsLeftButtonPressed)
         {
+            // Razor 모드: 클립 자르기
+            if (_viewModel != null && _viewModel.RazorModeEnabled)
+            {
+                var clickedClip = GetClipAtPosition(point);
+                if (clickedClip != null && _viewModel.RazorTool != null)
+                {
+                    var cutTime = XToTime(point.X);
+
+                    // Shift + 클릭: 모든 트랙 동시 자르기
+                    if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                    {
+                        _viewModel.RazorTool.CutAllTracksAtTime(cutTime);
+                    }
+                    else
+                    {
+                        _viewModel.RazorTool.CutClipAtTime(clickedClip, cutTime);
+                    }
+
+                    InvalidateVisual();
+                    e.Handled = true;
+                }
+                return;
+            }
+
+            // 일반 모드: 클립 선택/드래그/트림
             _selectedClip = GetClipAtPosition(point);
 
             if (_selectedClip != null)
@@ -263,6 +288,16 @@ public class ClipCanvasPanel : Control
         base.OnPointerMoved(e);
 
         var point = e.GetPosition(this);
+
+        // Razor 모드: Cross 커서
+        if (_viewModel != null && _viewModel.RazorModeEnabled && !_isDragging && !_isTrimming && !_isPanning)
+        {
+            Cursor = new Cursor(StandardCursorType.Cross);
+        }
+        else if (!_isDragging && !_isTrimming && !_isPanning)
+        {
+            Cursor = Cursor.Default;
+        }
 
         // Pan 처리 (중간 버튼)
         if (_isPanning)

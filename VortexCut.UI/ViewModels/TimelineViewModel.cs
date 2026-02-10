@@ -32,6 +32,9 @@ public partial class TimelineViewModel : ViewModelBase
     [ObservableProperty]
     private ClipModel? _selectedClip;
 
+    [ObservableProperty]
+    private ObservableCollection<ClipModel> _selectedClips = new();
+
     // Snap 설정
     [ObservableProperty]
     private bool _snapEnabled = true;
@@ -39,10 +42,17 @@ public partial class TimelineViewModel : ViewModelBase
     [ObservableProperty]
     private long _snapThresholdMs = 100;
 
+    // Razor 모드
+    [ObservableProperty]
+    private bool _razorModeEnabled = false;
+
+    public RazorTool? RazorTool { get; private set; }
+
     public TimelineViewModel(ProjectService projectService)
     {
         _projectService = projectService;
         InitializeDefaultTracks();
+        RazorTool = new RazorTool(this);
     }
 
     /// <summary>
