@@ -55,6 +55,9 @@ public class ClipCanvasPanel : Control
     private List<double> _frameTimes = new List<double>();
     private double _currentFps = 0;
 
+    // 애니메이션 (선택 펄스 효과)
+    private double _selectionPulsePhase = 0;
+
     public ClipCanvasPanel()
     {
         ClipToBounds = true;
@@ -115,6 +118,19 @@ public class ClipCanvasPanel : Control
 
             var avgDelta = _frameTimes.Average();
             _currentFps = 1000.0 / avgDelta;
+
+            // 선택 펄스 애니메이션 (부드러운 사인 곡선)
+            _selectionPulsePhase += deltaTime * 0.002; // 속도 조절
+            if (_selectionPulsePhase > Math.PI * 2)
+            {
+                _selectionPulsePhase -= Math.PI * 2;
+            }
+
+            // 선택된 클립이 있으면 애니메이션 계속 (다음 프레임 요청)
+            if (_viewModel?.SelectedClips.Count > 0)
+            {
+                Dispatcher.UIThread.Post(InvalidateVisual, Avalonia.Threading.DispatcherPriority.Render);
+            }
         }
 
         // 배경
@@ -358,24 +374,38 @@ public class ClipCanvasPanel : Control
 
         context.FillRectangle(gradientBrush, clipRect);
 
-        // 선택된 클립 글로우 효과
+        // 선택된 클립 펄스 글로우 효과 (애니메이션)
         if (isSelected)
         {
+            // 펄스 강도 (0.3 ~ 0.8 사이)
+            double pulseIntensity = 0.3 + (Math.Sin(_selectionPulsePhase) * 0.5 + 0.5) * 0.5;
+
+            // 외부 글로우 (큰 반경, 더 약함)
             var glowRect1 = new Rect(
-                clipRect.X - 3,
-                clipRect.Y - 3,
-                clipRect.Width + 6,
-                clipRect.Height + 6);
-            var glowBrush1 = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255));
+                clipRect.X - 4,
+                clipRect.Y - 4,
+                clipRect.Width + 8,
+                clipRect.Height + 8);
+            var glowBrush1 = new SolidColorBrush(Color.FromArgb((byte)(pulseIntensity * 60), 255, 255, 255));
             context.FillRectangle(glowBrush1, glowRect1);
 
+            // 중간 글로우
             var glowRect2 = new Rect(
+                clipRect.X - 2,
+                clipRect.Y - 2,
+                clipRect.Width + 4,
+                clipRect.Height + 4);
+            var glowBrush2 = new SolidColorBrush(Color.FromArgb((byte)(pulseIntensity * 100), 255, 255, 255));
+            context.FillRectangle(glowBrush2, glowRect2);
+
+            // 내부 글로우 (가장 밝음)
+            var glowRect3 = new Rect(
                 clipRect.X - 1,
                 clipRect.Y - 1,
                 clipRect.Width + 2,
                 clipRect.Height + 2);
-            var glowBrush2 = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255));
-            context.FillRectangle(glowBrush2, glowRect2);
+            var glowBrush3 = new SolidColorBrush(Color.FromArgb((byte)(pulseIntensity * 150), 80, 220, 255));
+            context.FillRectangle(glowBrush3, glowRect3);
         }
 
         // 호버 효과 (선택되지 않은 클립만)

@@ -76,6 +76,9 @@ public class TimelineHeader : Control
 
         // 상태 정보 표시 (우측 상단)
         DrawStatusInfo(context);
+
+        // Zoom 바 시각화 (좌측 하단)
+        DrawZoomBar(context);
     }
 
     private void DrawStatusInfo(DrawingContext context)
@@ -131,6 +134,120 @@ public class TimelineHeader : Control
 
         // 텍스트
         context.DrawText(text, new Point(textX, textY));
+    }
+
+    /// <summary>
+    /// Zoom 바 시각화 (좌측 하단)
+    /// </summary>
+    private void DrawZoomBar(DrawingContext context)
+    {
+        const double barWidth = 150;
+        const double barHeight = 8;
+        const double barX = 15;
+        const double barY = HeaderHeight - 20;
+
+        // Zoom 범위: 0.01 ~ 1.0
+        // 로그 스케일로 표시 (0.01이 왼쪽, 1.0이 오른쪽)
+        double minZoom = 0.01;
+        double maxZoom = 1.0;
+        double normalizedZoom = (Math.Log10(_pixelsPerMs) - Math.Log10(minZoom)) /
+                                (Math.Log10(maxZoom) - Math.Log10(minZoom));
+        normalizedZoom = Math.Clamp(normalizedZoom, 0, 1);
+
+        // 배경 트랙 (그라디언트)
+        var trackRect = new Rect(barX, barY, barWidth, barHeight);
+        var trackGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromArgb(180, 40, 40, 42), 0),
+                new GradientStop(Color.FromArgb(200, 50, 50, 52), 1)
+            }
+        };
+        context.FillRectangle(trackGradient, trackRect);
+
+        // 테두리
+        var trackBorderPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(150, 80, 80, 82)),
+            1);
+        context.DrawRectangle(trackBorderPen, trackRect);
+
+        // 채워진 부분 (Zoom 레벨)
+        var fillWidth = barWidth * normalizedZoom;
+        var fillRect = new Rect(barX, barY, fillWidth, barHeight);
+        var fillGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromRgb(0, 122, 204), 0),
+                new GradientStop(Color.FromRgb(28, 151, 234), 0.5),
+                new GradientStop(Color.FromRgb(80, 220, 255), 1)
+            }
+        };
+        context.FillRectangle(fillGradient, fillRect);
+
+        // 글로우 효과
+        var glowRect = new Rect(barX, barY - 1, fillWidth, barHeight + 2);
+        context.FillRectangle(
+            new SolidColorBrush(Color.FromArgb(40, 80, 220, 255)),
+            glowRect);
+
+        // 썸 (현재 위치 표시)
+        var thumbX = barX + fillWidth;
+        var thumbRect = new Rect(thumbX - 3, barY - 2, 6, barHeight + 4);
+        var thumbGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromRgb(255, 255, 255), 0),
+                new GradientStop(Color.FromRgb(200, 200, 200), 1)
+            }
+        };
+        context.FillRectangle(thumbGradient, thumbRect);
+
+        // 썸 테두리
+        var thumbBorderPen = new Pen(
+            new SolidColorBrush(Color.FromRgb(80, 220, 255)),
+            1.5);
+        context.DrawRectangle(thumbBorderPen, thumbRect);
+
+        // 라벨 (ZOOM)
+        var labelTypeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Bold);
+        var label = new FormattedText(
+            "ZOOM",
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            labelTypeface,
+            9,
+            new SolidColorBrush(Color.FromArgb(180, 200, 200, 200)));
+
+        context.DrawText(label, new Point(barX, barY - 12));
+
+        // 범위 표시 (최소/최대)
+        var minLabel = new FormattedText(
+            "1%",
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Normal),
+            8,
+            new SolidColorBrush(Color.FromArgb(150, 150, 150, 150)));
+
+        var maxLabel = new FormattedText(
+            "100%",
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Normal),
+            8,
+            new SolidColorBrush(Color.FromArgb(150, 150, 150, 150)));
+
+        context.DrawText(minLabel, new Point(barX, barY + barHeight + 2));
+        context.DrawText(maxLabel, new Point(barX + barWidth - maxLabel.Width, barY + barHeight + 2));
     }
 
     private void DrawTimeRuler(DrawingContext context)
