@@ -1,0 +1,134 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="720"
+        x:Class="VortexCut.UI.Views.MainWindow"
+        Title="VortexCut - Video Editor"
+        Width="1280" Height="720"
+        MinWidth="800" MinHeight="600">
+
+    <DockPanel LastChildFill="True">
+        <!-- Menu Bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="파일">
+                <MenuItem Header="새 프로젝트" />
+                <MenuItem Header="열기" />
+                <MenuItem Header="저장" />
+                <Separator />
+                <MenuItem Header="내보내기" />
+                <Separator />
+                <MenuItem Header="종료" />
+            </MenuItem>
+            <MenuItem Header="편집">
+                <MenuItem Header="실행 취소" />
+                <MenuItem Header="다시 실행" />
+                <Separator />
+                <MenuItem Header="잘라내기" />
+                <MenuItem Header="복사" />
+                <MenuItem Header="붙여넣기" />
+            </MenuItem>
+            <MenuItem Header="보기">
+                <MenuItem Header="프리뷰 창" />
+                <MenuItem Header="타임라인" />
+                <MenuItem Header="속성 패널" />
+            </MenuItem>
+        </Menu>
+
+        <!-- Main Content Grid -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- Top Area (Preview + Properties) -->
+                <RowDefinition Height="2*" />
+                <!-- Splitter -->
+                <RowDefinition Height="5" />
+                <!-- Timeline Area -->
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Top Area -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="5" />
+                    <ColumnDefinition Width="300" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Preview Panel -->
+                <Border Grid.Column="0" Background="#1E1E1E" Padding="10">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="프리뷰 영역"
+                                   Foreground="White"
+                                   FontSize="24"
+                                   HorizontalAlignment="Center"/>
+                        <Rectangle Width="640" Height="360"
+                                   Fill="Black"
+                                   Margin="0,10,0,0" />
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    Margin="0,10,0,0">
+                            <Button Content="◀◀" Margin="5,0" />
+                            <Button Content="▶" Margin="5,0" />
+                            <Button Content="▶▶" Margin="5,0" />
+                            <Button Content="⏹" Margin="5,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Column Splitter -->
+                <GridSplitter Grid.Column="1"
+                              Background="#444"
+                              ResizeDirection="Columns" />
+
+                <!-- Properties Panel -->
+                <Border Grid.Column="2" Background="#252526" Padding="10">
+                    <StackPanel>
+                        <TextBlock Text="속성 패널"
+                                   Foreground="White"
+                                   FontSize="16"
+                                   Margin="0,0,0,10"/>
+                        <TextBlock Text="클립 정보:"
+                                   Foreground="White"
+                                   FontSize="12"
+                                   Margin="0,0,0,5"/>
+                        <TextBlock Text="선택된 클립 없음"
+                                   Foreground="Gray"
+                                   FontSize="11" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Row Splitter -->
+            <GridSplitter Grid.Row="1"
+                          Background="#444"
+                          ResizeDirection="Rows" />
+
+            <!-- Timeline Panel -->
+            <Border Grid.Row="2" Background="#1E1E1E" Padding="10">
+                <StackPanel>
+                    <TextBlock Text="타임라인"
+                               Foreground="White"
+                               FontSize="16"
+                               Margin="0,0,0,10"/>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="비디오 트랙 1"
+                                       Foreground="White"
+                                       Margin="0,5"/>
+                            <Rectangle Height="60"
+                                       Fill="#2D2D30"
+                                       Margin="0,0,0,10" />
+                            <TextBlock Text="오디오 트랙 1"
+                                       Foreground="White"
+                                       Margin="0,5"/>
+                            <Rectangle Height="40"
+                                       Fill="#2D2D30"
+                                       Margin="0,0,0,10" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>
