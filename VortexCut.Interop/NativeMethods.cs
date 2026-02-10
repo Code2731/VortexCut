@@ -7,7 +7,14 @@ namespace VortexCut.Interop;
 /// </summary>
 public static class NativeMethods
 {
+    // 크로스 플랫폼 라이브러리 이름
+    // Windows: rust_engine.dll
+    // macOS/Linux: librust_engine.dylib/so (lib 접두사 필요)
+#if WINDOWS
     private const string DllName = "rust_engine";
+#else
+    private const string DllName = "librust_engine";
+#endif
 
     /// <summary>
     /// Rust에서 할당한 문자열 메모리 해제
