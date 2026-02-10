@@ -217,17 +217,51 @@ public class ClipCanvasPanel : Control
 
         context.DrawRectangle(borderPen, clipRect);
 
-        // 클립 이름
-        var fileName = System.IO.Path.GetFileName(clip.FilePath);
-        var text = new FormattedText(
-            fileName,
-            System.Globalization.CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"),
-            11,
-            Brushes.White);
+        // 클립 이름 (가독성 개선)
+        if (width > 40) // 너무 좁은 클립은 텍스트 생략
+        {
+            var fileName = System.IO.Path.GetFileNameWithoutExtension(clip.FilePath);
+            if (fileName.Length > 20)
+                fileName = fileName.Substring(0, 17) + "...";
 
-        context.DrawText(text, new Point(x + 5, y + 10));
+            var text = new FormattedText(
+                fileName,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Segoe UI", FontStyle.Normal, FontWeight.SemiBold),
+                12,
+                Brushes.White);
+
+            // 텍스트 배경 (반투명 검은색)
+            var textBgRect = new Rect(x + 4, y + 8, text.Width + 6, text.Height + 4);
+            context.FillRectangle(
+                new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)),
+                textBgRect);
+
+            // 텍스트
+            context.DrawText(text, new Point(x + 7, y + 10));
+
+            // 클립 지속시간 표시 (우측 상단)
+            if (width > 100)
+            {
+                var duration = TimeSpan.FromMilliseconds(clip.DurationMs);
+                var durationText = duration.ToString(@"mm\:ss");
+                var durationFormatted = new FormattedText(
+                    durationText,
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Normal),
+                    10,
+                    new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)));
+
+                var durationX = x + width - durationFormatted.Width - 7;
+                var durationBgRect = new Rect(durationX - 3, y + 8, durationFormatted.Width + 6, durationFormatted.Height + 4);
+                context.FillRectangle(
+                    new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)),
+                    durationBgRect);
+                context.DrawText(durationFormatted, new Point(durationX, y + 10));
+            }
+        }
 
         // 키프레임 렌더링 (선택된 클립만)
         if (isSelected && _viewModel != null)
