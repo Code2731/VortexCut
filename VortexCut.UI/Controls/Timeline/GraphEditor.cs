@@ -109,28 +109,53 @@ public class GraphEditor : Control
     {
         base.Render(context);
 
-        // 1. 배경
-        context.FillRectangle(new SolidColorBrush(Color.Parse("#1E1E1E")), Bounds);
+        // 1. 프로페셔널 그라디언트 배경 (After Effects 스타일)
+        var backgroundGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.Parse("#252527"), 0),
+                new GradientStop(Color.Parse("#1E1E20"), 0.5),
+                new GradientStop(Color.Parse("#181A18"), 1)
+            }
+        };
+        context.FillRectangle(backgroundGradient, Bounds);
 
-        // 2. 그리드
+        // 2. 미묘한 비네팅 효과 (가장자리 어둡게)
+        var vignetteBrush = new RadialGradientBrush
+        {
+            Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+            GradientOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+            Radius = 0.8,
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.3),
+                new GradientStop(Color.FromArgb(40, 0, 0, 0), 1)
+            }
+        };
+        context.FillRectangle(vignetteBrush, Bounds);
+
+        // 3. 그리드
         DrawGrid(context);
 
-        // 3. 축 (X축, Y축)
+        // 4. 축 (X축, Y축)
         DrawAxes(context);
 
-        // 4. 키프레임 곡선 (샘플링)
+        // 5. 키프레임 곡선 (샘플링)
         if (_keyframeSystem != null && _keyframeSystem.Keyframes.Count > 0)
         {
             DrawKeyframeCurve(context);
         }
 
-        // 5. 키프레임 포인트
+        // 6. 키프레임 포인트
         if (_keyframeSystem != null && _keyframeSystem.Keyframes.Count > 0)
         {
             DrawKeyframePoints(context);
         }
 
-        // 6. 베지어 핸들
+        // 7. 베지어 핸들
         if (_selectedKeyframe != null)
         {
             DrawBezierHandles(context, _selectedKeyframe);
@@ -139,40 +164,108 @@ public class GraphEditor : Control
 
     private void DrawGrid(DrawingContext context)
     {
-        var gridPen = new Pen(new SolidColorBrush(Color.Parse("#2A2A2A")), 1);
-        var centerPen = new Pen(new SolidColorBrush(Color.Parse("#404040")), 1.5);
+        // 프로페셔널 다층 그리드 (After Effects 스타일)
+        var microGridPen = new Pen(new SolidColorBrush(Color.FromArgb(20, 80, 80, 80)), 0.5);
+        var minorGridPen = new Pen(new SolidColorBrush(Color.FromArgb(40, 100, 100, 100)), 0.8);
+        var majorGridPen = new Pen(new SolidColorBrush(Color.FromArgb(80, 120, 120, 120)), 1.2);
 
-        // 수평 그리드
-        for (double y = 0; y < Bounds.Height; y += GridSpacing)
+        double microSpacing = GridSpacing / 4;
+        double minorSpacing = GridSpacing;
+        double majorSpacing = GridSpacing * 5;
+
+        // 마이크로 그리드 (가장 촘촘, 가장 연함)
+        for (double y = 0; y < Bounds.Height; y += microSpacing)
         {
-            var pen = Math.Abs(y - Bounds.Height / 2) < 1 ? centerPen : gridPen;
-            context.DrawLine(pen, new Point(0, y), new Point(Bounds.Width, y));
+            if (y % minorSpacing > 0.1)
+                context.DrawLine(microGridPen, new Point(0, y), new Point(Bounds.Width, y));
+        }
+        for (double x = 0; x < Bounds.Width; x += microSpacing)
+        {
+            if (x % minorSpacing > 0.1)
+                context.DrawLine(microGridPen, new Point(x, 0), new Point(x, Bounds.Height));
         }
 
-        // 수직 그리드
-        for (double x = 0; x < Bounds.Width; x += GridSpacing)
+        // 마이너 그리드 (중간)
+        for (double y = 0; y < Bounds.Height; y += minorSpacing)
         {
-            var pen = Math.Abs(x - Bounds.Width / 2) < 1 ? centerPen : gridPen;
-            context.DrawLine(pen, new Point(x, 0), new Point(x, Bounds.Height));
+            if (y % majorSpacing > 0.1)
+                context.DrawLine(minorGridPen, new Point(0, y), new Point(Bounds.Width, y));
+        }
+        for (double x = 0; x < Bounds.Width; x += minorSpacing)
+        {
+            if (x % majorSpacing > 0.1)
+                context.DrawLine(minorGridPen, new Point(x, 0), new Point(x, Bounds.Height));
+        }
+
+        // 메이저 그리드 (가장 진함)
+        for (double y = 0; y < Bounds.Height; y += majorSpacing)
+        {
+            context.DrawLine(majorGridPen, new Point(0, y), new Point(Bounds.Width, y));
+        }
+        for (double x = 0; x < Bounds.Width; x += majorSpacing)
+        {
+            context.DrawLine(majorGridPen, new Point(x, 0), new Point(x, Bounds.Height));
         }
     }
 
     private void DrawAxes(DrawingContext context)
     {
-        var axisPen = new Pen(new SolidColorBrush(Color.Parse("#606060")), 2);
-
-        // X축 (시간)
+        // X축 (시간) - 프로페셔널 스타일
         double y0 = ModelToScreen(0, 0).Y;
         if (y0 >= 0 && y0 <= Bounds.Height)
         {
-            context.DrawLine(axisPen, new Point(0, y0), new Point(Bounds.Width, y0));
+            // 축 그림자
+            var xAxisShadowPen = new Pen(
+                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
+                3);
+            context.DrawLine(xAxisShadowPen,
+                new Point(0, y0 + 1),
+                new Point(Bounds.Width, y0 + 1));
+
+            // 축 본체 (밝은 회색)
+            var xAxisPen = new Pen(
+                new SolidColorBrush(Color.FromRgb(150, 150, 150)),
+                2.5);
+            context.DrawLine(xAxisPen,
+                new Point(0, y0),
+                new Point(Bounds.Width, y0));
+
+            // 축 하이라이트 (상단)
+            var xAxisHighlightPen = new Pen(
+                new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)),
+                1);
+            context.DrawLine(xAxisHighlightPen,
+                new Point(0, y0 - 1),
+                new Point(Bounds.Width, y0 - 1));
         }
 
-        // Y축 (값)
+        // Y축 (값) - 프로페셔널 스타일
         double x0 = ModelToScreen(0, 0).X;
         if (x0 >= 0 && x0 <= Bounds.Width)
         {
-            context.DrawLine(axisPen, new Point(x0, 0), new Point(x0, Bounds.Height));
+            // 축 그림자
+            var yAxisShadowPen = new Pen(
+                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
+                3);
+            context.DrawLine(yAxisShadowPen,
+                new Point(x0 + 1, 0),
+                new Point(x0 + 1, Bounds.Height));
+
+            // 축 본체 (밝은 회색)
+            var yAxisPen = new Pen(
+                new SolidColorBrush(Color.FromRgb(150, 150, 150)),
+                2.5);
+            context.DrawLine(yAxisPen,
+                new Point(x0, 0),
+                new Point(x0, Bounds.Height));
+
+            // 축 하이라이트 (왼쪽)
+            var yAxisHighlightPen = new Pen(
+                new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)),
+                1);
+            context.DrawLine(yAxisHighlightPen,
+                new Point(x0 - 1, 0),
+                new Point(x0 - 1, Bounds.Height));
         }
     }
 
@@ -180,12 +273,13 @@ public class GraphEditor : Control
     {
         if (_keyframeSystem == null || _keyframeSystem.Keyframes.Count < 2) return;
 
+        double startTime = _keyframeSystem.Keyframes.First().Time;
+        double endTime = _keyframeSystem.Keyframes.Last().Time;
+
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {
             bool firstPoint = true;
-            double startTime = _keyframeSystem.Keyframes.First().Time;
-            double endTime = _keyframeSystem.Keyframes.Last().Time;
 
             // 0.01초 간격 샘플링
             for (double t = startTime; t <= endTime; t += 0.01)
@@ -208,7 +302,46 @@ public class GraphEditor : Control
             }
         }
 
-        context.DrawGeometry(null, new Pen(Brushes.Cyan, 2), geometry);
+        // 곡선 그림자 (깊이감)
+        var shadowPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)),
+            3.5);
+
+        var shadowGeometry = new StreamGeometry();
+        using (var ctx = shadowGeometry.Open())
+        {
+            bool firstPoint = true;
+            for (double t = startTime; t <= endTime; t += 0.01)
+            {
+                double value = _keyframeSystem.Interpolate(t);
+                var screenPoint = ModelToScreen(t, value);
+                screenPoint = new Point(screenPoint.X + 1.5, screenPoint.Y + 1.5);
+
+                if (screenPoint.X < -100 || screenPoint.X > Bounds.Width + 100) continue;
+
+                if (firstPoint)
+                {
+                    ctx.BeginFigure(screenPoint, false);
+                    firstPoint = false;
+                }
+                else
+                {
+                    ctx.LineTo(screenPoint);
+                }
+            }
+        }
+        context.DrawGeometry(null, shadowPen, shadowGeometry);
+
+        // 곡선 본체 (밝은 시안 + 글로우)
+        var glowPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(60, 80, 220, 255)),
+            5);
+        context.DrawGeometry(null, glowPen, geometry);
+
+        var curvePen = new Pen(
+            new SolidColorBrush(Color.FromRgb(80, 220, 255)),
+            2.5);
+        context.DrawGeometry(null, curvePen, geometry);
     }
 
     private void DrawKeyframePoints(DrawingContext context)
@@ -222,10 +355,52 @@ public class GraphEditor : Control
             // 화면 밖은 스킵
             if (centerPoint.X < -50 || centerPoint.X > Bounds.Width + 50) continue;
 
-            var brush = keyframe == _selectedKeyframe ? Brushes.Yellow : Brushes.White;
-            var radius = keyframe == _selectedKeyframe ? 6.0 : 4.0;
+            bool isSelected = keyframe == _selectedKeyframe;
+            var radius = isSelected ? 7.0 : 5.0;
 
-            context.DrawEllipse(brush, new Pen(Brushes.Black, 1.5), centerPoint, radius, radius);
+            // 키프레임 그림자
+            var shadowRadius = radius + 1.5;
+            var shadowPoint = new Point(centerPoint.X + 1.5, centerPoint.Y + 1.5);
+            context.DrawEllipse(
+                new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+                null,
+                shadowPoint,
+                shadowRadius,
+                shadowRadius);
+
+            // 키프레임 글로우 (선택된 경우)
+            if (isSelected)
+            {
+                var glowRadius = radius + 4;
+                context.DrawEllipse(
+                    new SolidColorBrush(Color.FromArgb(80, 255, 220, 80)),
+                    null,
+                    centerPoint,
+                    glowRadius,
+                    glowRadius);
+            }
+
+            // 키프레임 본체 (그라디언트)
+            Color innerColor = isSelected ? Color.FromRgb(255, 240, 100) : Color.FromRgb(255, 255, 255);
+            Color outerColor = isSelected ? Color.FromRgb(255, 200, 60) : Color.FromRgb(200, 200, 200);
+
+            var gradientBrush = new RadialGradientBrush
+            {
+                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+                GradientOrigin = new RelativePoint(0.3, 0.3, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(innerColor, 0),
+                    new GradientStop(outerColor, 1)
+                }
+            };
+
+            context.DrawEllipse(
+                gradientBrush,
+                new Pen(new SolidColorBrush(isSelected ? Color.FromRgb(255, 180, 40) : Color.FromRgb(100, 100, 100)), 2),
+                centerPoint,
+                radius,
+                radius);
         }
     }
 
@@ -233,26 +408,108 @@ public class GraphEditor : Control
     {
         var centerPoint = ModelToScreen(keyframe.Time, keyframe.Value);
 
-        // OutHandle
+        // OutHandle (초록색)
         if (keyframe.OutHandle != null)
         {
             var handleTime = keyframe.Time + keyframe.OutHandle.TimeOffset;
             var handleValue = keyframe.Value + keyframe.OutHandle.ValueOffset;
             var handlePoint = ModelToScreen(handleTime, handleValue);
 
-            context.DrawLine(new Pen(Brushes.Gray, 1.5), centerPoint, handlePoint);
-            context.DrawEllipse(Brushes.Green, new Pen(Brushes.Black, 1), handlePoint, 5, 5);
+            // 핸들 라인 그림자
+            var lineShadowPen = new Pen(
+                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
+                2.5);
+            context.DrawLine(lineShadowPen,
+                new Point(centerPoint.X + 1, centerPoint.Y + 1),
+                new Point(handlePoint.X + 1, handlePoint.Y + 1));
+
+            // 핸들 라인 본체 (점선)
+            var linePen = new Pen(
+                new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                2)
+            {
+                DashStyle = new DashStyle(new double[] { 3, 3 }, 0)
+            };
+            context.DrawLine(linePen, centerPoint, handlePoint);
+
+            // 핸들 포인트 그림자
+            var handleShadowPoint = new Point(handlePoint.X + 1.5, handlePoint.Y + 1.5);
+            context.DrawEllipse(
+                new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+                null,
+                handleShadowPoint,
+                6.5,
+                6.5);
+
+            // 핸들 포인트 본체 (그라디언트 초록)
+            var handleGradient = new RadialGradientBrush
+            {
+                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+                GradientOrigin = new RelativePoint(0.3, 0.3, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(Color.FromRgb(150, 255, 150), 0),
+                    new GradientStop(Color.FromRgb(80, 200, 80), 1)
+                }
+            };
+            context.DrawEllipse(
+                handleGradient,
+                new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 2),
+                handlePoint,
+                6,
+                6);
         }
 
-        // InHandle
+        // InHandle (빨간색)
         if (keyframe.InHandle != null)
         {
             var handleTime = keyframe.Time + keyframe.InHandle.TimeOffset;
             var handleValue = keyframe.Value + keyframe.InHandle.ValueOffset;
             var handlePoint = ModelToScreen(handleTime, handleValue);
 
-            context.DrawLine(new Pen(Brushes.Gray, 1.5), centerPoint, handlePoint);
-            context.DrawEllipse(Brushes.Red, new Pen(Brushes.Black, 1), handlePoint, 5, 5);
+            // 핸들 라인 그림자
+            var lineShadowPen = new Pen(
+                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
+                2.5);
+            context.DrawLine(lineShadowPen,
+                new Point(centerPoint.X + 1, centerPoint.Y + 1),
+                new Point(handlePoint.X + 1, handlePoint.Y + 1));
+
+            // 핸들 라인 본체 (점선)
+            var linePen = new Pen(
+                new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                2)
+            {
+                DashStyle = new DashStyle(new double[] { 3, 3 }, 0)
+            };
+            context.DrawLine(linePen, centerPoint, handlePoint);
+
+            // 핸들 포인트 그림자
+            var handleShadowPoint = new Point(handlePoint.X + 1.5, handlePoint.Y + 1.5);
+            context.DrawEllipse(
+                new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+                null,
+                handleShadowPoint,
+                6.5,
+                6.5);
+
+            // 핸들 포인트 본체 (그라디언트 빨강)
+            var handleGradient = new RadialGradientBrush
+            {
+                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+                GradientOrigin = new RelativePoint(0.3, 0.3, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(Color.FromRgb(255, 150, 150), 0),
+                    new GradientStop(Color.FromRgb(200, 80, 80), 1)
+                }
+            };
+            context.DrawEllipse(
+                handleGradient,
+                new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 2),
+                handlePoint,
+                6,
+                6);
         }
     }
 
