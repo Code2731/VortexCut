@@ -32,10 +32,18 @@ public class TimelineMinimap : Control
     {
         base.Render(context);
 
-        // 배경 렌더링
-        context.FillRectangle(
-            new SolidColorBrush(Color.FromRgb(30, 30, 30)),
-            new Rect(0, 0, Bounds.Width, MinimapHeight));
+        // 프로페셔널 그라디언트 배경 (DaVinci Resolve 스타일)
+        var backgroundGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromRgb(35, 35, 37), 0),
+                new GradientStop(Color.FromRgb(25, 25, 27), 1)
+            }
+        };
+        context.FillRectangle(backgroundGradient, new Rect(0, 0, Bounds.Width, MinimapHeight));
 
         if (_viewModel == null || _viewModel.Clips.Count == 0)
             return;
@@ -52,31 +60,67 @@ public class TimelineMinimap : Control
         // 미니맵 스케일 계산 (전체 타임라인을 Bounds.Width에 맞춤)
         _pixelsPerMs = Bounds.Width / totalDuration;
 
-        // 모든 클립 렌더링 (작은 박스)
+        // 모든 클립 렌더링 (타입별 색상)
         foreach (var clip in _viewModel.Clips)
         {
             var x = clip.StartTimeMs * _pixelsPerMs;
             var width = clip.DurationMs * _pixelsPerMs;
             var y = clip.TrackIndex * 2.0; // 트랙별로 2px씩 오프셋
-            var height = 2.0;
+            var height = 2.5;
 
-            if (y + height > MinimapHeight)
-                y = MinimapHeight - height;
+            if (y + height > MinimapHeight - 1)
+                y = MinimapHeight - height - 1;
 
             var rect = new Rect(x, y, Math.Max(width, 1), height);
-            context.FillRectangle(Brushes.Gray, rect);
+
+            // 트랙 타입 확인
+            var track = _viewModel.VideoTracks.FirstOrDefault(t => t.Index == clip.TrackIndex)
+                        ?? (Core.Models.TrackModel?)_viewModel.AudioTracks.FirstOrDefault(t => t.Index == clip.TrackIndex);
+
+            // 타입별 색상 (비디오: 파란색, 오디오: 초록색)
+            Brush clipBrush;
+            if (track?.Type == Core.Models.TrackType.Audio)
+            {
+                clipBrush = new SolidColorBrush(Color.FromRgb(100, 200, 100)); // 밝은 초록
+            }
+            else
+            {
+                clipBrush = new SolidColorBrush(Color.FromRgb(100, 150, 220)); // 밝은 파란색
+            }
+
+            context.FillRectangle(clipBrush, rect);
         }
 
-        // 현재 뷰포트 하이라이트 (노란 테두리)
+        // 현재 뷰포트 하이라이트 (프로페셔널 스타일)
         var viewportRect = CalculateViewportRect();
-        context.DrawRectangle(
-            new Pen(Brushes.Yellow, 2),
+
+        // 뷰포트 내부 반투명 오버레이
+        context.FillRectangle(
+            new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
             viewportRect);
 
-        // Playhead 표시 (빨간 선)
+        // 뷰포트 테두리 (글로우 효과)
+        var viewportPen = new Pen(
+            new SolidColorBrush(Color.FromRgb(255, 200, 80)),
+            2);
+        context.DrawRectangle(viewportPen, viewportRect);
+
+        // Playhead 표시 (더 선명한 빨간 선 + 그림자)
         var playheadX = _viewModel.CurrentTimeMs * _pixelsPerMs;
-        context.DrawLine(
-            new Pen(Brushes.Red, 1),
+
+        // Playhead 그림자
+        var shadowPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
+            2);
+        context.DrawLine(shadowPen,
+            new Point(playheadX + 1, 0),
+            new Point(playheadX + 1, MinimapHeight));
+
+        // Playhead 본체
+        var playheadPen = new Pen(
+            new SolidColorBrush(Color.FromRgb(255, 60, 60)),
+            2);
+        context.DrawLine(playheadPen,
             new Point(playheadX, 0),
             new Point(playheadX, MinimapHeight));
     }

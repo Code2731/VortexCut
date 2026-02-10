@@ -115,8 +115,7 @@ public class ClipCanvasPanel : Control
 
     private void DrawTrackBackgrounds(DrawingContext context)
     {
-        var trackBrush = new SolidColorBrush(Color.Parse("#2D2D30"));
-        var borderPen = new Pen(new SolidColorBrush(Color.Parse("#444444")), 1);
+        var borderPen = new Pen(new SolidColorBrush(Color.Parse("#3A3A3C")), 0.8);
 
         // 비디오 트랙
         for (int i = 0; i < _videoTracks.Count; i++)
@@ -125,7 +124,32 @@ public class ClipCanvasPanel : Control
             double y = i * track.Height;
             var trackRect = new Rect(0, y, Bounds.Width, track.Height);
 
-            context.FillRectangle(trackBrush, trackRect);
+            // 프로페셔널 그라디언트 배경 (교차 패턴)
+            var isEven = i % 2 == 0;
+            var trackGradient = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(isEven ? Color.Parse("#2D2D30") : Color.Parse("#252527"), 0),
+                    new GradientStop(isEven ? Color.Parse("#252527") : Color.Parse("#1E1E20"), 1)
+                }
+            };
+
+            context.FillRectangle(trackGradient, trackRect);
+
+            // 미묘한 상단 하이라이트 (3D 효과)
+            if (i > 0)
+            {
+                var highlightPen = new Pen(
+                    new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
+                    1);
+                context.DrawLine(highlightPen,
+                    new Point(0, y),
+                    new Point(Bounds.Width, y));
+            }
+
             context.DrawRectangle(borderPen, trackRect);
         }
 
@@ -137,7 +161,32 @@ public class ClipCanvasPanel : Control
             double y = audioStartY + i * track.Height;
             var trackRect = new Rect(0, y, Bounds.Width, track.Height);
 
-            context.FillRectangle(trackBrush, trackRect);
+            // 오디오 트랙은 약간 다른 색조 (미묘한 초록 톤)
+            var isEven = i % 2 == 0;
+            var audioTrackGradient = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(isEven ? Color.Parse("#252828") : Color.Parse("#1E2120"), 0),
+                    new GradientStop(isEven ? Color.Parse("#1E2120") : Color.Parse("#181A18"), 1)
+                }
+            };
+
+            context.FillRectangle(audioTrackGradient, trackRect);
+
+            // 미묘한 상단 하이라이트
+            if (i > 0)
+            {
+                var highlightPen = new Pen(
+                    new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
+                    1);
+                context.DrawLine(highlightPen,
+                    new Point(0, y),
+                    new Point(Bounds.Width, y));
+            }
+
             context.DrawRectangle(borderPen, trackRect);
         }
     }
@@ -202,7 +251,37 @@ public class ClipCanvasPanel : Control
             }
         };
 
+        // 클립 그림자 (DaVinci Resolve 스타일)
+        var shadowRect = new Rect(
+            clipRect.X + 2,
+            clipRect.Y + 2,
+            clipRect.Width,
+            clipRect.Height);
+        context.FillRectangle(
+            new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)),
+            shadowRect);
+
         context.FillRectangle(gradientBrush, clipRect);
+
+        // 선택된 클립 글로우 효과
+        if (isSelected)
+        {
+            var glowRect1 = new Rect(
+                clipRect.X - 3,
+                clipRect.Y - 3,
+                clipRect.Width + 6,
+                clipRect.Height + 6);
+            var glowBrush1 = new SolidColorBrush(Color.FromArgb(30, 255, 255, 255));
+            context.FillRectangle(glowBrush1, glowRect1);
+
+            var glowRect2 = new Rect(
+                clipRect.X - 1,
+                clipRect.Y - 1,
+                clipRect.Width + 2,
+                clipRect.Height + 2);
+            var glowBrush2 = new SolidColorBrush(Color.FromArgb(60, 255, 255, 255));
+            context.FillRectangle(glowBrush2, glowRect2);
+        }
 
         // 오디오 웨이브폼 (간단한 시뮬레이션)
         if (isAudioClip && width > 50)
@@ -210,12 +289,32 @@ public class ClipCanvasPanel : Control
             DrawAudioWaveform(context, clipRect);
         }
 
-        // 테두리 (선택된 클립은 하얀색, 일반은 회색)
+        // 테두리 (선택된 클립은 밝은 하얀색, 일반은 미묘한 회색)
         var borderPen = isSelected
-            ? new Pen(Brushes.White, 2)
-            : new Pen(new SolidColorBrush(Color.Parse("#4A4A4C")), 1);
+            ? new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 2.5)
+            : new Pen(new SolidColorBrush(Color.Parse("#5A5A5C")), 1.2);
 
         context.DrawRectangle(borderPen, clipRect);
+
+        // 트림 핸들 시각화 (양 끝 10px 영역)
+        if (isSelected && width > 30)
+        {
+            // 왼쪽 트림 핸들
+            var leftHandleRect = new Rect(clipRect.X, clipRect.Y, 2, clipRect.Height);
+            context.FillRectangle(
+                new SolidColorBrush(Color.FromRgb(255, 200, 80)),
+                leftHandleRect);
+
+            // 오른쪽 트림 핸들
+            var rightHandleRect = new Rect(
+                clipRect.Right - 2,
+                clipRect.Y,
+                2,
+                clipRect.Height);
+            context.FillRectangle(
+                new SolidColorBrush(Color.FromRgb(255, 200, 80)),
+                rightHandleRect);
+        }
 
         // 클립 이름 (가독성 개선)
         if (width > 40) // 너무 좁은 클립은 텍스트 생략
@@ -322,6 +421,8 @@ public class ClipCanvasPanel : Control
 
     private void DrawKeyframes(DrawingContext context, ClipModel clip)
     {
+        if (_viewModel == null) return;
+
         var keyframeSystem = GetKeyframeSystem(clip, _viewModel.SelectedKeyframeSystem);
         if (keyframeSystem == null || keyframeSystem.Keyframes.Count == 0) return;
 
@@ -353,32 +454,76 @@ public class ClipCanvasPanel : Control
 
     private void DrawKeyframeDiamond(DrawingContext context, double x, double y, InterpolationType interpolation)
     {
-        const double Size = 8;
+        const double Size = 10;
 
-        // 보간 타입에 따라 색상 변경
-        var brush = interpolation switch
+        // 보간 타입에 따라 색상 변경 (더 밝고 선명하게)
+        Color color = interpolation switch
         {
-            InterpolationType.Linear => Brushes.Yellow,
-            InterpolationType.Bezier => Brushes.Cyan,
-            InterpolationType.EaseIn => Brushes.LightGreen,
-            InterpolationType.EaseOut => Brushes.LightBlue,
-            InterpolationType.EaseInOut => Brushes.Orange,
-            InterpolationType.Hold => Brushes.Red,
-            _ => Brushes.Yellow
+            InterpolationType.Linear => Color.FromRgb(255, 220, 80),    // 밝은 황금색
+            InterpolationType.Bezier => Color.FromRgb(80, 220, 255),    // 밝은 시안
+            InterpolationType.EaseIn => Color.FromRgb(120, 255, 120),   // 밝은 초록
+            InterpolationType.EaseOut => Color.FromRgb(120, 180, 255),  // 밝은 파랑
+            InterpolationType.EaseInOut => Color.FromRgb(255, 180, 80), // 밝은 주황
+            InterpolationType.Hold => Color.FromRgb(255, 100, 100),     // 밝은 빨강
+            _ => Color.FromRgb(255, 220, 80)
         };
 
-        // 다이아몬드 그리기
+        // 다이아몬드 그림자 (깊이감)
+        var shadowGeometry = new StreamGeometry();
+        using (var ctx = shadowGeometry.Open())
+        {
+            ctx.BeginFigure(new Point(x + 1, y - Size / 2 + 1), true);
+            ctx.LineTo(new Point(x + Size / 2 + 1, y + 1));
+            ctx.LineTo(new Point(x + 1, y + Size / 2 + 1));
+            ctx.LineTo(new Point(x - Size / 2 + 1, y + 1));
+            ctx.EndFigure(true);
+        }
+        context.DrawGeometry(
+            new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+            null,
+            shadowGeometry);
+
+        // 다이아몬드 본체 (그라디언트)
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {
-            ctx.BeginFigure(new Point(x, y - Size / 2), true); // 상단
-            ctx.LineTo(new Point(x + Size / 2, y)); // 오른쪽
-            ctx.LineTo(new Point(x, y + Size / 2)); // 하단
-            ctx.LineTo(new Point(x - Size / 2, y)); // 왼쪽
+            ctx.BeginFigure(new Point(x, y - Size / 2), true);
+            ctx.LineTo(new Point(x + Size / 2, y));
+            ctx.LineTo(new Point(x, y + Size / 2));
+            ctx.LineTo(new Point(x - Size / 2, y));
             ctx.EndFigure(true);
         }
 
-        context.DrawGeometry(brush, new Pen(Brushes.Black, 1), geometry);
+        var diamondGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(color, 0),
+                new GradientStop(Color.FromRgb(
+                    (byte)Math.Max(0, color.R - 60),
+                    (byte)Math.Max(0, color.G - 60),
+                    (byte)Math.Max(0, color.B - 60)), 1)
+            }
+        };
+
+        context.DrawGeometry(
+            diamondGradient,
+            new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1.5),
+            geometry);
+
+        // 내부 하이라이트 (반짝임 효과)
+        var highlightGeometry = new StreamGeometry();
+        using (var ctx = highlightGeometry.Open())
+        {
+            ctx.BeginFigure(new Point(x, y - Size / 2 + 2), false);
+            ctx.LineTo(new Point(x + Size / 4, y - Size / 4 + 1));
+        }
+        context.DrawGeometry(
+            null,
+            new Pen(new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)), 1.2),
+            highlightGeometry);
     }
 
     /// <summary>
@@ -417,18 +562,85 @@ public class ClipCanvasPanel : Control
         if (_viewModel == null) return;
 
         double x = TimeToX(_viewModel.CurrentTimeMs);
-        var pen = new Pen(Brushes.Red, 2);
-        context.DrawLine(pen,
+
+        // Playhead 그림자 (깊이감)
+        var shadowPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+            3);
+        context.DrawLine(shadowPen,
+            new Point(x + 1.5, 0),
+            new Point(x + 1.5, Bounds.Height));
+
+        // Playhead 본체 (밝은 빨간색)
+        var playheadPen = new Pen(
+            new SolidColorBrush(Color.FromRgb(255, 50, 50)),
+            2.5);
+        context.DrawLine(playheadPen,
             new Point(x, 0),
             new Point(x, Bounds.Height));
+
+        // Playhead 헤드 (상단 삼각형 - DaVinci Resolve 스타일)
+        var headGeometry = new StreamGeometry();
+        using (var ctx = headGeometry.Open())
+        {
+            ctx.BeginFigure(new Point(x, 0), true);
+            ctx.LineTo(new Point(x - 8, -12));
+            ctx.LineTo(new Point(x + 8, -12));
+            ctx.EndFigure(true);
+        }
+
+        // 헤드 그림자
+        var headShadowGeometry = new StreamGeometry();
+        using (var ctx = headShadowGeometry.Open())
+        {
+            ctx.BeginFigure(new Point(x + 1, 1), true);
+            ctx.LineTo(new Point(x - 7, -11));
+            ctx.LineTo(new Point(x + 9, -11));
+            ctx.EndFigure(true);
+        }
+        context.DrawGeometry(
+            new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+            null,
+            headShadowGeometry);
+
+        // 헤드 본체 (그라디언트)
+        var headGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromRgb(255, 80, 80), 0),
+                new GradientStop(Color.FromRgb(255, 40, 40), 1)
+            }
+        };
+        context.DrawGeometry(
+            headGradient,
+            new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1.2),
+            headGeometry);
     }
 
     private void DrawSnapGuideline(DrawingContext context, long timeMs)
     {
         double x = TimeToX(timeMs);
-        var pen = new Pen(Brushes.Yellow, 1)
+
+        // Snap 가이드라인 그림자
+        var shadowPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)),
+            2)
         {
-            DashStyle = DashStyle.Dash
+            DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
+        };
+        context.DrawLine(shadowPen,
+            new Point(x + 1, 0),
+            new Point(x + 1, Bounds.Height));
+
+        // Snap 가이드라인 본체 (밝은 황금색)
+        var pen = new Pen(
+            new SolidColorBrush(Color.FromRgb(255, 220, 80)),
+            1.5)
+        {
+            DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
         };
         context.DrawLine(pen,
             new Point(x, 0),

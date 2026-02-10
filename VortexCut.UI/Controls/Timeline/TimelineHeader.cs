@@ -42,10 +42,28 @@ public class TimelineHeader : Control
     {
         base.Render(context);
 
-        // 배경
-        var headerBrush = new SolidColorBrush(Color.Parse("#2D2D30"));
+        // 프로페셔널 그라디언트 배경 (DaVinci Resolve 스타일)
         var headerRect = new Rect(0, 0, Bounds.Width, HeaderHeight);
-        context.FillRectangle(headerBrush, headerRect);
+        var headerGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.Parse("#3A3A3C"), 0),
+                new GradientStop(Color.Parse("#2D2D30"), 0.5),
+                new GradientStop(Color.Parse("#252527"), 1)
+            }
+        };
+        context.FillRectangle(headerGradient, headerRect);
+
+        // 하단 하이라이트 라인 (미묘한 3D 효과)
+        var highlightPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+            1);
+        context.DrawLine(highlightPen,
+            new Point(0, HeaderHeight - 1),
+            new Point(Bounds.Width, HeaderHeight - 1));
 
         // 시간 눈금
         DrawTimeRuler(context);
@@ -129,41 +147,100 @@ public class TimelineHeader : Control
 
             var color = ArgbToColor(marker.ColorArgb);
             var brush = new SolidColorBrush(color);
+            var size = marker.Type == MarkerType.Chapter ? 14.0 : 10.0;
+            var yTop = 18.0;
 
-            // 삼각형 그리기 (▼)
+            // 마커 그림자 (깊이감)
+            var shadowGeometry = new StreamGeometry();
+            using (var ctx = shadowGeometry.Open())
+            {
+                ctx.BeginFigure(new Point(x + 1, yTop + 1), true);
+                ctx.LineTo(new Point(x - size / 2 + 1, yTop + size + 1));
+                ctx.LineTo(new Point(x + size / 2 + 1, yTop + size + 1));
+                ctx.EndFigure(true);
+            }
+            context.DrawGeometry(
+                new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)),
+                null,
+                shadowGeometry);
+
+            // 마커 본체 (더 밝고 선명하게)
             var geometry = new StreamGeometry();
             using (var ctx = geometry.Open())
             {
-                var size = marker.Type == MarkerType.Chapter ? 12.0 : 8.0;
-                var yTop = 20.0;
-
                 ctx.BeginFigure(new Point(x, yTop), true);
                 ctx.LineTo(new Point(x - size / 2, yTop + size));
                 ctx.LineTo(new Point(x + size / 2, yTop + size));
                 ctx.EndFigure(true);
             }
-            context.DrawGeometry(brush, null, geometry);
 
-            // Region 마커: 수평선 추가
+            // 마커 내부 그라디언트
+            var markerGradient = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(color, 0),
+                    new GradientStop(Color.FromRgb(
+                        (byte)Math.Max(0, color.R - 40),
+                        (byte)Math.Max(0, color.G - 40),
+                        (byte)Math.Max(0, color.B - 40)), 1)
+                }
+            };
+
+            context.DrawGeometry(markerGradient, new Pen(Brushes.White, 0.8), geometry);
+
+            // Region 마커: 프로페셔널 스타일 범위 표시
             if (marker.IsRegion)
             {
                 double endX = TimeToX(marker.EndTimeMs);
-                var pen = new Pen(brush, 2);
-                context.DrawLine(pen, new Point(x, 30), new Point(endX, 30));
 
-                // 끝 삼각형
+                // 범위 배경 (반투명)
+                var regionRect = new Rect(x, yTop + size, endX - x, HeaderHeight - yTop - size);
+                context.FillRectangle(
+                    new SolidColorBrush(Color.FromArgb(30, color.R, color.G, color.B)),
+                    regionRect);
+
+                // 상단 연결선 (더 두껍고 그라디언트)
+                var linePen = new Pen(
+                    new LinearGradientBrush
+                    {
+                        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                        EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+                        GradientStops = new GradientStops
+                        {
+                            new GradientStop(color, 0),
+                            new GradientStop(Color.FromArgb(180, color.R, color.G, color.B), 0.5),
+                            new GradientStop(color, 1)
+                        }
+                    },
+                    2.5);
+                context.DrawLine(linePen, new Point(x, 30), new Point(endX, 30));
+
+                // 끝 삼각형 (그림자 포함)
+                var endShadowGeometry = new StreamGeometry();
+                using (var ctx = endShadowGeometry.Open())
+                {
+                    ctx.BeginFigure(new Point(endX + 1, yTop + 1), true);
+                    ctx.LineTo(new Point(endX - size / 2 + 1, yTop + size + 1));
+                    ctx.LineTo(new Point(endX + size / 2 + 1, yTop + size + 1));
+                    ctx.EndFigure(true);
+                }
+                context.DrawGeometry(
+                    new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)),
+                    null,
+                    endShadowGeometry);
+
                 var endGeometry = new StreamGeometry();
                 using (var ctx = endGeometry.Open())
                 {
-                    var size = marker.Type == MarkerType.Chapter ? 12.0 : 8.0;
-                    var yTop = 20.0;
-
                     ctx.BeginFigure(new Point(endX, yTop), true);
                     ctx.LineTo(new Point(endX - size / 2, yTop + size));
                     ctx.LineTo(new Point(endX + size / 2, yTop + size));
                     ctx.EndFigure(true);
                 }
-                context.DrawGeometry(brush, null, endGeometry);
+                context.DrawGeometry(markerGradient, new Pen(Brushes.White, 0.8), endGeometry);
             }
         }
 
