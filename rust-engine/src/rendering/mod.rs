@@ -1,4 +1,3 @@
 // 렌더링 파이프라인 모듈
-// 비디오 합성, 오디오 믹싱, 프레임 렌더링
 
-// TODO: 렌더링 기능 구현
+// TODO: Renderer, Compositor, AudioMixer 구현

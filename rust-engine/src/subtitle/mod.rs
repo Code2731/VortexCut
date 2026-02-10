@@ -1,4 +1,3 @@
 // 자막 처리 모듈
-// SRT/ASS 파싱, 렌더링, Whisper 통합
 
-// TODO: 자막 기능 구현
+// TODO: SRT/ASS 파서, 자막 렌더러 구현
