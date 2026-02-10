@@ -30,14 +30,14 @@
                               Padding="0"
                               ToolTip.Tip="Mute"/>
 
-                <!-- Solo 버튼 (Phase 2B) -->
+                <!-- Solo 버튼 -->
                 <ToggleButton Name="SoloButton"
+                              IsChecked="{Binding Track.IsSolo}"
                               Content="S"
                               Width="50" Height="20"
                               FontSize="10"
                               Padding="0"
-                              ToolTip.Tip="Solo"
-                              IsVisible="False"/>
+                              ToolTip.Tip="Solo"/>
 
                 <!-- Lock 버튼 -->
                 <ToggleButton Name="LockButton"

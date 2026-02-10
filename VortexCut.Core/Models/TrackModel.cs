@@ -45,6 +45,11 @@ public class TrackModel
     public bool IsMuted { get; set; }
 
     /// <summary>
+    /// 솔로 상태 (이 트랙만 재생, 다른 트랙 뮤트)
+    /// </summary>
+    public bool IsSolo { get; set; }
+
+    /// <summary>
     /// 잠금 상태 (편집 불가)
     /// </summary>
     public bool IsLocked { get; set; }

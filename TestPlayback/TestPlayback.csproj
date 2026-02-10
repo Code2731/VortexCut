@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VortexCut.UI\VortexCut.UI.csproj" />
+    <ProjectReference Include="..\VortexCut.Core\VortexCut.Core.csproj" />
+    <ProjectReference Include="..\VortexCut.Interop\VortexCut.Interop.csproj" />
+  </ItemGroup>
+</Project>

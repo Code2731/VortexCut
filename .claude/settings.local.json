@@ -32,7 +32,8 @@
       "Bash(VortexCut.UI/Views/MainWindow.axaml.cs << 'MAINWINDOW_EOF'\nusing Avalonia.Controls;\nusing VortexCut.UI.ViewModels;\n\nnamespace VortexCut.UI.Views;\n\npublic partial class MainWindow : Window\n{\n    private MainViewModel? _viewModel;\n\n    public MainWindow\\(\\)\n    {\n        InitializeComponent\\(\\);\n        _viewModel = new MainViewModel\\(\\);\n        DataContext = _viewModel;\n\n        // StorageProvider 설정 및 초기화\n        Opened += \\(sender, e\\) =>\n        {\n            _viewModel.SetStorageProvider\\(StorageProvider\\);\n            _viewModel.Initialize\\(\\); // 첫 프로젝트 생성\n            InitializeTimeline\\(\\);\n        };\n    }\n\n    private void InitializeTimeline\\(\\)\n    {\n        if \\(_viewModel == null\\) return;\n\n        // Timeline Canvas 업데이트\n        _viewModel.Timeline.Clips.CollectionChanged += \\(s, e\\) =>\n        {\n            UpdateTimelineCanvas\\(\\);\n        };\n\n        UpdateTimelineCanvas\\(\\);\n    }\n\n    private void UpdateTimelineCanvas\\(\\)\n    {\n        if \\(_viewModel == null\\) return;\n\n        // TimelineCanvas에 클립 데이터 전달\n        var canvas = this.FindControl<Controls.TimelineCanvas>\\(\"TimelineCanvas\"\\);\n        if \\(canvas != null\\)\n        {\n            canvas.SetClips\\(_viewModel.Timeline.Clips\\);\n        }\n    }\n}\nMAINWINDOW_EOF)",
       "Bash(tee:*)",
       "Bash(findstr:*)",
-      "Bash(ls -la \"h:\\\\MyProject\\\\VortexCut\\\\VortexCut.UI\\\\Controls\\\\Timeline\"\" | grep -i \".cs \")"
+      "Bash(ls -la \"h:\\\\MyProject\\\\VortexCut\\\\VortexCut.UI\\\\Controls\\\\Timeline\"\" | grep -i \".cs \")",
+      "Bash(taskkill:*)"
     ]
   }
 }
