@@ -366,18 +366,46 @@ public class TimelineHeader : Control
 
             context.DrawGeometry(markerGradient, new Pen(Brushes.White, 0.8), geometry);
 
-            // Region 마커: 프로페셔널 스타일 범위 표시
+            // Region 마커: 프로페셔널 스타일 범위 표시 (DaVinci Resolve 스타일)
             if (marker.IsRegion)
             {
                 double endX = TimeToX(marker.EndTimeMs);
 
-                // 범위 배경 (반투명)
+                // 범위 배경 (반투명 그라디언트)
                 var regionRect = new Rect(x, yTop + size, endX - x, HeaderHeight - yTop - size);
-                context.FillRectangle(
-                    new SolidColorBrush(Color.FromArgb(30, color.R, color.G, color.B)),
-                    regionRect);
+                var regionBgGradient = new LinearGradientBrush
+                {
+                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                    EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                    GradientStops = new GradientStops
+                    {
+                        new GradientStop(Color.FromArgb(50, color.R, color.G, color.B), 0),
+                        new GradientStop(Color.FromArgb(30, color.R, color.G, color.B), 0.5),
+                        new GradientStop(Color.FromArgb(15, color.R, color.G, color.B), 1)
+                    }
+                };
+                context.FillRectangle(regionBgGradient, regionRect);
 
-                // 상단 연결선 (더 두껍고 그라디언트)
+                // 범위 테두리 (좌우 수직선)
+                var edgePen = new Pen(
+                    new SolidColorBrush(Color.FromArgb(80, color.R, color.G, color.B)),
+                    1.5)
+                {
+                    DashStyle = new DashStyle(new double[] { 2, 2 }, 0)
+                };
+                context.DrawLine(edgePen,
+                    new Point(x, yTop + size),
+                    new Point(x, HeaderHeight));
+                context.DrawLine(edgePen,
+                    new Point(endX, yTop + size),
+                    new Point(endX, HeaderHeight));
+
+                // 상단 연결선 (더 두껍고 그라디언트 + 글로우)
+                var lineGlowPen = new Pen(
+                    new SolidColorBrush(Color.FromArgb(60, color.R, color.G, color.B)),
+                    5);
+                context.DrawLine(lineGlowPen, new Point(x, 30), new Point(endX, 30));
+
                 var linePen = new Pen(
                     new LinearGradientBrush
                     {
@@ -386,11 +414,11 @@ public class TimelineHeader : Control
                         GradientStops = new GradientStops
                         {
                             new GradientStop(color, 0),
-                            new GradientStop(Color.FromArgb(180, color.R, color.G, color.B), 0.5),
+                            new GradientStop(Color.FromArgb(220, color.R, color.G, color.B), 0.5),
                             new GradientStop(color, 1)
                         }
                     },
-                    2.5);
+                    3);
                 context.DrawLine(linePen, new Point(x, 30), new Point(endX, 30));
 
                 // 끝 삼각형 (그림자 포함)
@@ -416,6 +444,40 @@ public class TimelineHeader : Control
                     ctx.EndFigure(true);
                 }
                 context.DrawGeometry(markerGradient, new Pen(Brushes.White, 0.8), endGeometry);
+
+                // Region 라벨 (중앙에 표시)
+                if (endX - x > 50 && !string.IsNullOrWhiteSpace(marker.Name))
+                {
+                    var labelTypeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.SemiBold);
+                    var label = new FormattedText(
+                        marker.Name,
+                        System.Globalization.CultureInfo.CurrentCulture,
+                        FlowDirection.LeftToRight,
+                        labelTypeface,
+                        10,
+                        Brushes.White);
+
+                    var labelX = x + (endX - x) / 2 - label.Width / 2;
+                    var labelY = 35;
+
+                    // 라벨 배경
+                    var labelBgRect = new Rect(labelX - 4, labelY - 2, label.Width + 8, label.Height + 4);
+                    var labelBgGradient = new LinearGradientBrush
+                    {
+                        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                        EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                        GradientStops = new GradientStops
+                        {
+                            new GradientStop(Color.FromArgb(220, color.R, color.G, color.B), 0),
+                            new GradientStop(Color.FromArgb(200, (byte)Math.Max(0, color.R - 40),
+                                (byte)Math.Max(0, color.G - 40), (byte)Math.Max(0, color.B - 40)), 1)
+                        }
+                    };
+                    context.FillRectangle(labelBgGradient, labelBgRect);
+                    context.DrawRectangle(new Pen(Brushes.White, 1), labelBgRect);
+
+                    context.DrawText(label, new Point(labelX, labelY));
+                }
             }
         }
 

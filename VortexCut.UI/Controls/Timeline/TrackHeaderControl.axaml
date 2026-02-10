@@ -15,18 +15,27 @@
             </LinearGradientBrush>
         </Border.Background>
         <Grid RowDefinitions="Auto,Auto,*,Auto">
-            <!-- 트랙 번호/타입 배지 -->
+            <!-- 트랙 번호/타입 배지 (아이콘 + 번호) -->
             <Border Grid.Row="0"
+                    Name="TrackBadge"
                     Background="#007ACC"
                     Padding="4,2"
                     CornerRadius="0,0,8,8"
                     HorizontalAlignment="Center"
                     Margin="0,0,0,4">
-                <TextBlock Text="{Binding Track.Index}"
-                           FontSize="10"
-                           FontWeight="Bold"
-                           Foreground="White"
-                           HorizontalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" Spacing="3">
+                    <!-- 트랙 타입 아이콘 (Code-behind에서 설정) -->
+                    <TextBlock Name="TrackTypeIcon"
+                               FontSize="11"
+                               Foreground="White"
+                               VerticalAlignment="Center"/>
+                    <!-- 트랙 번호 -->
+                    <TextBlock Text="{Binding Track.Index}"
+                               FontSize="10"
+                               FontWeight="Bold"
+                               Foreground="White"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
             </Border>
 
             <!-- 트랙 이름 -->
