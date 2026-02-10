@@ -544,6 +544,12 @@ public class ClipCanvasPanel : Control
             }
         }
 
+        // 클립 전환 효과 오버레이 (페이드 인/아웃 시각화)
+        if (width > 30)
+        {
+            DrawTransitionOverlay(context, clipRect);
+        }
+
         // 키프레임 렌더링 (선택된 클립만)
         if (isSelected && _viewModel != null)
         {
@@ -599,6 +605,78 @@ public class ClipCanvasPanel : Control
         context.DrawLine(centerLinePen,
             new Point(clipRect.Left, centerY),
             new Point(clipRect.Right, centerY));
+    }
+
+    /// <summary>
+    /// 클립 전환 효과 오버레이 (페이드 인/아웃 시각화)
+    /// </summary>
+    private void DrawTransitionOverlay(DrawingContext context, Rect clipRect)
+    {
+        const double fadeWidth = 15; // 페이드 효과 너비
+
+        // 페이드 인 (좌측)
+        var fadeInRect = new Rect(clipRect.X, clipRect.Y, fadeWidth, clipRect.Height);
+        var fadeInGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromArgb(100, 0, 0, 0), 0),
+                new GradientStop(Color.FromArgb(0, 0, 0, 0), 1)
+            }
+        };
+        context.FillRectangle(fadeInGradient, fadeInRect);
+
+        // 페이드 인 아이콘 (작은 삼각형)
+        var fadeInIconGeometry = new StreamGeometry();
+        using (var ctx = fadeInIconGeometry.Open())
+        {
+            double iconX = clipRect.X + 3;
+            double iconY = clipRect.Y + clipRect.Height / 2;
+            ctx.BeginFigure(new Point(iconX, iconY - 3), true);
+            ctx.LineTo(new Point(iconX + 5, iconY));
+            ctx.LineTo(new Point(iconX, iconY + 3));
+            ctx.EndFigure(true);
+        }
+        context.DrawGeometry(
+            new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
+            new Pen(new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)), 0.8),
+            fadeInIconGeometry);
+
+        // 페이드 아웃 (우측)
+        var fadeOutRect = new Rect(
+            clipRect.Right - fadeWidth,
+            clipRect.Y,
+            fadeWidth,
+            clipRect.Height);
+        var fadeOutGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromArgb(0, 0, 0, 0), 0),
+                new GradientStop(Color.FromArgb(100, 0, 0, 0), 1)
+            }
+        };
+        context.FillRectangle(fadeOutGradient, fadeOutRect);
+
+        // 페이드 아웃 아이콘 (작은 삼각형)
+        var fadeOutIconGeometry = new StreamGeometry();
+        using (var ctx = fadeOutIconGeometry.Open())
+        {
+            double iconX = clipRect.Right - 8;
+            double iconY = clipRect.Y + clipRect.Height / 2;
+            ctx.BeginFigure(new Point(iconX + 5, iconY - 3), true);
+            ctx.LineTo(new Point(iconX, iconY));
+            ctx.LineTo(new Point(iconX + 5, iconY + 3));
+            ctx.EndFigure(true);
+        }
+        context.DrawGeometry(
+            new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
+            new Pen(new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)), 0.8),
+            fadeOutIconGeometry);
     }
 
     private void DrawKeyframes(DrawingContext context, ClipModel clip)
@@ -1115,27 +1193,78 @@ public class ClipCanvasPanel : Control
     {
         double x = TimeToX(timeMs);
 
+        // Snap 임계값 시각화 (양쪽 범위 표시)
+        if (_viewModel != null)
+        {
+            double thresholdX = _viewModel.SnapThresholdMs * _pixelsPerMs;
+
+            // 임계값 범위 (반투명 영역)
+            var thresholdRect = new Rect(
+                x - thresholdX,
+                0,
+                thresholdX * 2,
+                Bounds.Height);
+            var thresholdGradient = new RadialGradientBrush
+            {
+                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(Color.FromArgb(40, 255, 220, 80), 0),
+                    new GradientStop(Color.FromArgb(15, 255, 220, 80), 0.5),
+                    new GradientStop(Color.FromArgb(0, 255, 220, 80), 1)
+                }
+            };
+            context.FillRectangle(thresholdGradient, thresholdRect);
+        }
+
         // Snap 가이드라인 그림자
         var shadowPen = new Pen(
-            new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)),
-            2)
+            new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
+            3)
         {
             DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
         };
         context.DrawLine(shadowPen,
-            new Point(x + 1, 0),
-            new Point(x + 1, Bounds.Height));
+            new Point(x + 1.5, 0),
+            new Point(x + 1.5, Bounds.Height));
+
+        // Snap 가이드라인 글로우
+        var glowPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(80, 255, 220, 80)),
+            5)
+        {
+            DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
+        };
+        context.DrawLine(glowPen,
+            new Point(x, 0),
+            new Point(x, Bounds.Height));
 
         // Snap 가이드라인 본체 (밝은 황금색)
         var pen = new Pen(
             new SolidColorBrush(Color.FromRgb(255, 220, 80)),
-            1.5)
+            2)
         {
             DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
         };
         context.DrawLine(pen,
             new Point(x, 0),
             new Point(x, Bounds.Height));
+
+        // 상단 스냅 아이콘 (자석 효과)
+        var snapIconGeometry = new StreamGeometry();
+        using (var ctx = snapIconGeometry.Open())
+        {
+            // U자 자석 모양
+            ctx.BeginFigure(new Point(x - 8, 10), false);
+            ctx.LineTo(new Point(x - 8, 20));
+            ctx.QuadraticBezierTo(new Point(x - 8, 25), new Point(x, 25));
+            ctx.QuadraticBezierTo(new Point(x + 8, 25), new Point(x + 8, 20));
+            ctx.LineTo(new Point(x + 8, 10));
+        }
+        context.DrawGeometry(
+            null,
+            new Pen(new SolidColorBrush(Color.FromRgb(255, 220, 80)), 2.5),
+            snapIconGeometry);
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
