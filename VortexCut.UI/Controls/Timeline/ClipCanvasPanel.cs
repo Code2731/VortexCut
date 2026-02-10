@@ -110,8 +110,17 @@ public class ClipCanvasPanel : Control
         // 클립들
         DrawClips(context);
 
+        // 링크된 클립 연결선 (비디오+오디오)
+        DrawLinkedClipConnections(context);
+
         // Playhead
         DrawPlayhead(context);
+
+        // 호버된 클립 툴팁
+        if (_hoveredClip != null)
+        {
+            DrawClipTooltip(context, _hoveredClip);
+        }
     }
 
     private void DrawTrackBackgrounds(DrawingContext context)
@@ -489,6 +498,58 @@ public class ClipCanvasPanel : Control
         double clipY = GetTrackYPosition(clip.TrackIndex);
         double keyframeY = clipY + 20; // 클립 상단에서 20px
 
+        // 키프레임 간 연결선 (After Effects 스타일)
+        if (keyframeSystem.Keyframes.Count > 1)
+        {
+            var sortedKeyframes = keyframeSystem.Keyframes.OrderBy(k => k.Time).ToList();
+
+            for (int i = 0; i < sortedKeyframes.Count - 1; i++)
+            {
+                var kf1 = sortedKeyframes[i];
+                var kf2 = sortedKeyframes[i + 1];
+
+                double kf1X = clipX + (kf1.Time * 1000 * _pixelsPerMs);
+                double kf2X = clipX + (kf2.Time * 1000 * _pixelsPerMs);
+
+                // 곡선 연결선 (베지어 곡선 시뮬레이션)
+                var curveGeometry = new StreamGeometry();
+                using (var ctx = curveGeometry.Open())
+                {
+                    ctx.BeginFigure(new Point(kf1X, keyframeY), false);
+
+                    // 보간 타입에 따라 다른 곡선
+                    if (kf1.Interpolation == InterpolationType.Linear || kf1.Interpolation == InterpolationType.Hold)
+                    {
+                        // 직선
+                        ctx.LineTo(new Point(kf2X, keyframeY));
+                    }
+                    else
+                    {
+                        // 부드러운 베지어 곡선 (EaseIn, EaseOut, EaseInOut, Bezier)
+                        double midX = (kf1X + kf2X) / 2;
+                        double controlY = keyframeY - 8; // 위로 8px 올림
+
+                        ctx.QuadraticBezierTo(
+                            new Point(midX, controlY),
+                            new Point(kf2X, keyframeY));
+                    }
+                }
+
+                // 연결선 그림자
+                var lineShadowPen = new Pen(
+                    new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)),
+                    2);
+                context.DrawGeometry(null, lineShadowPen, curveGeometry);
+
+                // 연결선 본체 (밝은 시안색)
+                var linePen = new Pen(
+                    new SolidColorBrush(Color.FromArgb(180, 80, 220, 255)),
+                    1.5);
+                context.DrawGeometry(null, linePen, curveGeometry);
+            }
+        }
+
+        // 키프레임 다이아몬드 (연결선 위에 렌더링)
         foreach (var keyframe in keyframeSystem.Keyframes)
         {
             double keyframeTimeMs = keyframe.Time * 1000; // 초 → ms
@@ -586,6 +647,67 @@ public class ClipCanvasPanel : Control
     }
 
     /// <summary>
+    /// 링크된 클립 연결선 렌더링 (비디오+오디오 링크 표시)
+    /// </summary>
+    private void DrawLinkedClipConnections(DrawingContext context)
+    {
+        // 비디오 클립 중 LinkedAudioClipId가 있는 클립 찾기
+        var linkedVideoClips = _clips.Where(c => c.LinkedAudioClipId.HasValue).ToList();
+
+        foreach (var videoClip in linkedVideoClips)
+        {
+            var audioClip = _clips.FirstOrDefault(c => c.Id == videoClip.LinkedAudioClipId);
+            if (audioClip == null) continue;
+
+            // 비디오 클립 중심점
+            double videoX = TimeToX(videoClip.StartTimeMs) + DurationToWidth(videoClip.DurationMs) / 2;
+            double videoY = GetTrackYPosition(videoClip.TrackIndex);
+            var videoTrack = GetTrackByIndex(videoClip.TrackIndex);
+            if (videoTrack == null) continue;
+            double videoHeight = videoTrack.Height - 10;
+            double videoCenterY = videoY + videoHeight / 2 + 5;
+
+            // 오디오 클립 중심점
+            double audioX = TimeToX(audioClip.StartTimeMs) + DurationToWidth(audioClip.DurationMs) / 2;
+            double audioY = GetTrackYPosition(audioClip.TrackIndex);
+            var audioTrack = GetTrackByIndex(audioClip.TrackIndex);
+            if (audioTrack == null) continue;
+            double audioHeight = audioTrack.Height - 10;
+            double audioCenterY = audioY + audioHeight / 2 + 5;
+
+            // 연결선 (점선, 반투명 시안색)
+            var linkPen = new Pen(
+                new SolidColorBrush(Color.FromArgb(120, 80, 220, 255)),
+                1.5)
+            {
+                DashStyle = new DashStyle(new double[] { 3, 3 }, 0)
+            };
+
+            context.DrawLine(linkPen,
+                new Point(videoX, videoCenterY),
+                new Point(audioX, audioCenterY));
+
+            // 연결 아이콘 (작은 원 - 비디오 클립 쪽)
+            var videoIconRect = new Rect(videoX - 4, videoCenterY - 4, 8, 8);
+            context.FillRectangle(
+                new SolidColorBrush(Color.FromRgb(80, 220, 255)),
+                videoIconRect);
+            context.DrawRectangle(
+                new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1),
+                videoIconRect);
+
+            // 연결 아이콘 (작은 원 - 오디오 클립 쪽)
+            var audioIconRect = new Rect(audioX - 4, audioCenterY - 4, 8, 8);
+            context.FillRectangle(
+                new SolidColorBrush(Color.FromRgb(80, 220, 255)),
+                audioIconRect);
+            context.DrawRectangle(
+                new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1),
+                audioIconRect);
+        }
+    }
+
+    /// <summary>
     /// 마우스 위치에서 키프레임 검색 (HitTest)
     /// </summary>
     private (Keyframe?, KeyframeSystem?, ClipModel?) GetKeyframeAtPosition(Point point)
@@ -677,6 +799,122 @@ public class ClipCanvasPanel : Control
             headGradient,
             new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1.2),
             headGeometry);
+    }
+
+    /// <summary>
+    /// 클립 툴팁 렌더링 (호버 시 상세 정보 표시)
+    /// </summary>
+    private void DrawClipTooltip(DrawingContext context, ClipModel clip)
+    {
+        double x = TimeToX(clip.StartTimeMs);
+        double width = DurationToWidth(clip.DurationMs);
+        double y = GetTrackYPosition(clip.TrackIndex);
+        var track = GetTrackByIndex(clip.TrackIndex);
+        if (track == null) return;
+
+        // 툴팁 내용 준비
+        var fileName = System.IO.Path.GetFileName(clip.FilePath);
+        var duration = TimeSpan.FromMilliseconds(clip.DurationMs);
+        var durationStr = duration.ToString(@"mm\:ss\.fff");
+        var startTime = TimeSpan.FromMilliseconds(clip.StartTimeMs);
+        var startTimeStr = startTime.ToString(@"mm\:ss\.fff");
+
+        var tooltipLines = new[]
+        {
+            $"📁 {fileName}",
+            $"⏱ Duration: {durationStr}",
+            $"▶ Start: {startTimeStr}",
+            $"🎬 Track: {track.Name}"
+        };
+
+        var typeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Normal);
+        const double fontSize = 11;
+        const double lineHeight = 16;
+        const double padding = 8;
+
+        // 텍스트 크기 계산
+        double maxTextWidth = 0;
+        foreach (var line in tooltipLines)
+        {
+            var text = new FormattedText(
+                line,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                fontSize,
+                Brushes.White);
+            maxTextWidth = Math.Max(maxTextWidth, text.Width);
+        }
+
+        // 툴팁 위치 (클립 위쪽, 화면 경계 체크)
+        double tooltipX = x + width / 2 - maxTextWidth / 2 - padding;
+        double tooltipY = y - (tooltipLines.Length * lineHeight) - padding * 2 - 10;
+
+        // 화면 경계 체크
+        tooltipX = Math.Clamp(tooltipX, 10, Bounds.Width - maxTextWidth - padding * 2 - 10);
+        tooltipY = Math.Max(10, tooltipY);
+
+        double tooltipWidth = maxTextWidth + padding * 2;
+        double tooltipHeight = tooltipLines.Length * lineHeight + padding * 2;
+
+        // 툴팁 배경 (프로페셔널 그라디언트 + 그림자)
+        var shadowRect = new Rect(tooltipX + 3, tooltipY + 3, tooltipWidth, tooltipHeight);
+        context.FillRectangle(
+            new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)),
+            shadowRect);
+
+        var bgRect = new Rect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+        var bgGradient = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            GradientStops = new GradientStops
+            {
+                new GradientStop(Color.FromArgb(240, 50, 50, 52), 0),
+                new GradientStop(Color.FromArgb(250, 40, 40, 42), 1)
+            }
+        };
+        context.FillRectangle(bgGradient, bgRect);
+
+        // 테두리 (시안색)
+        var borderPen = new Pen(
+            new SolidColorBrush(Color.FromArgb(200, 80, 220, 255)),
+            1.5);
+        context.DrawRectangle(borderPen, bgRect);
+
+        // 텍스트 렌더링
+        double textY = tooltipY + padding;
+        foreach (var line in tooltipLines)
+        {
+            var text = new FormattedText(
+                line,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                fontSize,
+                Brushes.White);
+
+            context.DrawText(text, new Point(tooltipX + padding, textY));
+            textY += lineHeight;
+        }
+
+        // 아래쪽 화살표 (툴팁이 클립을 가리키도록)
+        var arrowGeometry = new StreamGeometry();
+        using (var ctx = arrowGeometry.Open())
+        {
+            double arrowX = x + width / 2;
+            double arrowY = tooltipY + tooltipHeight;
+
+            ctx.BeginFigure(new Point(arrowX, arrowY + 8), true);
+            ctx.LineTo(new Point(arrowX - 6, arrowY));
+            ctx.LineTo(new Point(arrowX + 6, arrowY));
+            ctx.EndFigure(true);
+        }
+
+        context.DrawGeometry(
+            new SolidColorBrush(Color.FromArgb(250, 40, 40, 42)),
+            new Pen(new SolidColorBrush(Color.FromArgb(200, 80, 220, 255)), 1.5),
+            arrowGeometry);
     }
 
     private void DrawSnapGuideline(DrawingContext context, long timeMs)
