@@ -1,0 +1,203 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- VortexCut 전문가급 스타일 정의 -->
+
+    <!-- 색상 리소스 (Kdenlive/DaVinci Resolve 스타일) -->
+    <Style>
+        <Style.Resources>
+            <Color x:Key="VortexDarkBackground">#1E1E20</Color>
+            <Color x:Key="VortexMidBackground">#252527</Color>
+            <Color x:Key="VortexLightBackground">#2D2D30</Color>
+            <Color x:Key="VortexBorder">#3A3A3C</Color>
+            <Color x:Key="VortexAccent">#007ACC</Color>
+            <Color x:Key="VortexAccentHover">#1C97EA</Color>
+            <Color x:Key="VortexText">#FFFFFF</Color>
+            <Color x:Key="VortexTextSecondary">#CCCCCC</Color>
+        </Style.Resources>
+    </Style>
+
+    <!-- 프로페셔널 버튼 스타일 -->
+    <Style Selector="Button">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#3E3E40" Offset="0"/>
+                    <GradientStop Color="#2D2D30" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Foreground" Value="{StaticResource VortexText}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource VortexBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="CornerRadius" Value="3"/>
+        <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <Style Selector="Button:pointerover">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#4A4A4C" Offset="0"/>
+                    <GradientStop Color="#3A3A3C" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="BorderBrush">
+            <Setter.Value>
+                <SolidColorBrush Color="{StaticResource VortexAccent}"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button:pressed">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#2D2D30" Offset="0"/>
+                    <GradientStop Color="#1E1E20" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 프로페셔널 ToggleButton 스타일 -->
+    <Style Selector="ToggleButton">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#3E3E40" Offset="0"/>
+                    <GradientStop Color="#2D2D30" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Foreground" Value="{StaticResource VortexTextSecondary}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource VortexBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="CornerRadius" Value="3"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style Selector="ToggleButton:pointerover">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#4A4A4C" Offset="0"/>
+                    <GradientStop Color="#3A3A3C" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="BorderBrush">
+            <Setter.Value>
+                <SolidColorBrush Color="{StaticResource VortexAccent}"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style Selector="ToggleButton:checked">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#1C97EA" Offset="0"/>
+                    <GradientStop Color="#007ACC" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Foreground" Value="#FFFFFF"/>
+        <Setter Property="BorderBrush">
+            <Setter.Value>
+                <SolidColorBrush Color="#007ACC"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style Selector="ToggleButton:checked:pointerover">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#2BA3F0" Offset="0"/>
+                    <GradientStop Color="#1C97EA" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 프로페셔널 TextBox 스타일 -->
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="#1E1E20"/>
+        <Setter Property="Foreground" Value="{StaticResource VortexText}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource VortexBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="6,4"/>
+        <Setter Property="CornerRadius" Value="3"/>
+        <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <Style Selector="TextBox:focus">
+        <Setter Property="BorderBrush">
+            <Setter.Value>
+                <SolidColorBrush Color="{StaticResource VortexAccent}"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 프로페셔널 ComboBox 스타일 -->
+    <Style Selector="ComboBox">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#3E3E40" Offset="0"/>
+                    <GradientStop Color="#2D2D30" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Foreground" Value="{StaticResource VortexText}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource VortexBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="CornerRadius" Value="3"/>
+    </Style>
+
+    <!-- Menu 스타일 -->
+    <Style Selector="Menu">
+        <Setter Property="Background" Value="#2D2D30"/>
+    </Style>
+
+    <Style Selector="MenuItem">
+        <Setter Property="Foreground" Value="{StaticResource VortexText}"/>
+        <Setter Property="Padding" Value="8,4"/>
+    </Style>
+
+    <Style Selector="MenuItem:pointerover">
+        <Setter Property="Background">
+            <Setter.Value>
+                <SolidColorBrush Color="{StaticResource VortexAccent}"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- GridSplitter 스타일 -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Color="#3A3A3C" Offset="0"/>
+                    <GradientStop Color="#4A4A4C" Offset="0.5"/>
+                    <GradientStop Color="#3A3A3C" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style Selector="GridSplitter:pointerover">
+        <Setter Property="Background">
+            <Setter.Value>
+                <SolidColorBrush Color="{StaticResource VortexAccent}"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</Styles>

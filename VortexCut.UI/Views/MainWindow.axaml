@@ -11,11 +11,27 @@
         x:DataType="vm:MainViewModel"
         Title="VortexCut - Professional Video Editor"
         Width="1600" Height="900"
-        MinWidth="1024" MinHeight="600">
+        MinWidth="1024" MinHeight="600"
+        Background="#1E1E20"
+        Foreground="#FFFFFF">
+
+    <Window.Styles>
+        <Style Selector="Window">
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#252527" Offset="0"/>
+                        <GradientStop Color="#1E1E20" Offset="0.5"/>
+                        <GradientStop Color="#181A18" Offset="1"/>
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Styles>
 
     <DockPanel LastChildFill="True">
         <!-- Menu Bar -->
-        <Menu DockPanel.Dock="Top">
+        <Menu DockPanel.Dock="Top" Background="#2D2D30">
             <MenuItem Header="파일">
                 <MenuItem Header="새 프로젝트" Command="{Binding CreateNewProjectCommand}" />
                 <MenuItem Header="비디오 가져오기" Command="{Binding OpenVideoFileCommand}" />
