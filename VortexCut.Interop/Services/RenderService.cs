@@ -152,19 +152,17 @@ public class RenderService : IDisposable
     }
 
     /// <summary>
-    /// 프레임 렌더링
+    /// 프레임 렌더링 (Mutex busy 시 null 반환 = 프레임 스킵)
     /// </summary>
-    public RenderedFrame RenderFrame(long timestampMs)
+    public RenderedFrame? RenderFrame(long timestampMs)
     {
         ThrowIfDisposed();
         ThrowIfNoRenderer();
 
         IntPtr rendererPtr = _renderer!.DangerousGetHandle();
-        System.Diagnostics.Debug.WriteLine($"🎬 RenderService.RenderFrame: timestampMs={timestampMs}, rendererPtr=0x{rendererPtr:X}");
 
         if (rendererPtr == IntPtr.Zero)
         {
-            System.Diagnostics.Debug.WriteLine($"   ❌ Renderer pointer is NULL!");
             throw new InvalidOperationException("Renderer pointer is null");
         }
 
@@ -176,8 +174,13 @@ public class RenderService : IDisposable
             out IntPtr dataPtr,
             out nuint dataSize);
 
-        System.Diagnostics.Debug.WriteLine($"   renderer_render_frame returned: {result}, width={width}, height={height}, dataSize={dataSize}");
         CheckError(result);
+
+        // Mutex busy로 프레임 스킵된 경우 (try_lock 실패 → width=0, height=0)
+        if (width == 0 || height == 0)
+        {
+            return null;
+        }
 
         return new RenderedFrame(width, height, dataPtr, dataSize, timestampMs);
     }
@@ -244,20 +247,58 @@ public class RenderService : IDisposable
 
         System.Diagnostics.Debug.WriteLine($"📸 RenderService.GenerateThumbnail: file={filePath}, timestamp={timestampMs}ms, size={thumbWidth}x{thumbHeight}");
 
-        int result = NativeMethods.generate_video_thumbnail(
-            filePath,
-            timestampMs,
-            thumbWidth,
-            thumbHeight,
-            out uint width,
-            out uint height,
-            out IntPtr dataPtr,
-            out nuint dataSize);
+        // UTF-8 수동 마샬링 (한글 경로 지원)
+        IntPtr filePathPtr = Marshal.StringToCoTaskMemUTF8(filePath);
+        int result;
+        uint width, height;
+        IntPtr dataPtr;
+        nuint dataSize;
+        try
+        {
+            result = NativeMethods.generate_video_thumbnail(
+                filePathPtr,
+                timestampMs,
+                thumbWidth,
+                thumbHeight,
+                out width,
+                out height,
+                out dataPtr,
+                out dataSize);
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(filePathPtr);
+        }
 
         System.Diagnostics.Debug.WriteLine($"   generate_video_thumbnail returned: {result}, width={width}, height={height}, dataSize={dataSize}");
         CheckError(result);
 
         return new RenderedFrame(width, height, dataPtr, dataSize, timestampMs);
+    }
+
+    /// <summary>
+    /// 프레임 캐시 클리어 (클립 편집/트림 변경 시 호출)
+    /// </summary>
+    public void ClearCache()
+    {
+        ThrowIfDisposed();
+        ThrowIfNoRenderer();
+
+        IntPtr rendererPtr = _renderer!.DangerousGetHandle();
+        NativeMethods.renderer_clear_cache(rendererPtr);
+    }
+
+    /// <summary>
+    /// 캐시 통계 조회 (디버깅용)
+    /// </summary>
+    public (uint CachedFrames, nuint CacheBytes) GetCacheStats()
+    {
+        ThrowIfDisposed();
+        ThrowIfNoRenderer();
+
+        IntPtr rendererPtr = _renderer!.DangerousGetHandle();
+        NativeMethods.renderer_get_cache_stats(rendererPtr, out uint frames, out nuint bytes);
+        return (frames, bytes);
     }
 
     private void ThrowIfDisposed()

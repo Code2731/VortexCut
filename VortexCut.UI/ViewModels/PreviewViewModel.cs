@@ -19,12 +19,37 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     private bool _isPlaying = false;
 
     private TimelineViewModel? _timelineViewModel; // Timeline 참조
+    private volatile bool _isRendering = false; // 렌더링 동시성 제어
+
+    // Stopwatch 기반 플레이백 클럭 (누적 오차 방지)
+    private readonly System.Diagnostics.Stopwatch _playbackClock = new();
+    private long _playbackStartTimeMs; // 재생 시작 시점의 타임라인 위치
+
+    // 더블 버퍼링: 두 비트맵을 교대 사용 → 참조 변경으로 Image 바인딩 강제 갱신
+    private WriteableBitmap? _bitmapA;
+    private WriteableBitmap? _bitmapB;
+    private bool _useA = true;
+    private int _bitmapWidth;
+    private int _bitmapHeight;
 
     [ObservableProperty]
     private WriteableBitmap? _previewImage;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurrentTimeDisplay))]
     private long _currentTimeMs = 0;
+
+    /// <summary>
+    /// 타임코드 표시용 포맷 문자열 (HH:MM:SS.mmm)
+    /// </summary>
+    public string CurrentTimeDisplay
+    {
+        get
+        {
+            var ts = TimeSpan.FromMilliseconds(CurrentTimeMs);
+            return ts.ToString(@"hh\:mm\:ss\.fff");
+        }
+    }
 
     [ObservableProperty]
     private bool _isLoading = false;
@@ -52,82 +77,79 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     /// </summary>
     public async Task RenderFrameAsync(long timestampMs)
     {
-        Services.DebugLogger.Log($"🖼️ RenderFrameAsync START: timestampMs={timestampMs}");
-        IsLoading = true;
         try
         {
-            // CRITICAL: frame 데이터를 먼저 복사해야 함 (using으로 인한 조기 해제 방지)
             byte[]? frameData = null;
             uint width = 0, height = 0;
 
             await Task.Run(() =>
             {
-                Services.DebugLogger.Log($"   Calling _projectService.RenderFrame({timestampMs})...");
                 using var frame = _projectService.RenderFrame(timestampMs);
                 if (frame != null)
                 {
-                    Services.DebugLogger.Log($"   ✅ Frame rendered: {frame.Width}x{frame.Height}, Data size: {frame.Data.Length} bytes");
-                    // 데이터를 복사 (frame이 dispose되기 전에)
                     frameData = frame.Data.ToArray();
                     width = frame.Width;
                     height = frame.Height;
                 }
-                else
-                {
-                    Services.DebugLogger.Log($"   ⚠️ Frame is null!");
-                }
             });
 
-            // UI 스레드에서 비트맵 업데이트
-            if (frameData != null)
+            // UI 스레드에서 비트맵 + 시간 업데이트
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                await UpdatePreviewImageAsync(frameData, width, height);
-            }
-
-            CurrentTimeMs = timestampMs;
-            Services.DebugLogger.Log($"🖼️ RenderFrameAsync END: CurrentTimeMs={CurrentTimeMs}");
+                if (frameData != null)
+                {
+                    try { UpdateBitmap(frameData, width, height); }
+                    catch (Exception ex) { Services.DebugLogger.Log($"Bitmap error: {ex.Message}"); }
+                }
+                CurrentTimeMs = timestampMs;
+            });
         }
-        finally
+        catch (Exception ex)
         {
-            IsLoading = false;
+            Services.DebugLogger.Log($"RenderFrameAsync error: {ex.Message}");
         }
     }
 
     /// <summary>
-    /// 프레임 데이터를 WriteableBitmap으로 변환 (UI 스레드에서 실행)
+    /// 비트맵 업데이트 (UI 스레드에서 호출해야 함)
+    /// 더블 버퍼링: A/B 두 비트맵을 교대 사용하여 매 프레임 참조 변경
+    /// → Avalonia Image 바인딩이 새 객체를 감지하여 화면 갱신
     /// </summary>
-    private async Task UpdatePreviewImageAsync(byte[] frameData, uint width, uint height)
+    private void UpdateBitmap(byte[] frameData, uint width, uint height)
     {
-        Services.DebugLogger.Log($"   🔵 UpdatePreviewImageAsync: Creating bitmap {width}x{height}");
-
-        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+        // 해상도 변경 시 양쪽 버퍼 모두 재생성
+        if (_bitmapWidth != (int)width || _bitmapHeight != (int)height)
         {
-            Services.DebugLogger.Log($"      🔵 UI Thread executing!");
-            // RGBA 데이터를 WriteableBitmap으로 변환
-            var bitmap = new WriteableBitmap(
-                new Avalonia.PixelSize((int)width, (int)height),
-                new Avalonia.Vector(96, 96),
-                Avalonia.Platform.PixelFormat.Rgba8888,
-                Avalonia.Platform.AlphaFormat.Unpremul
-            );
+            var pixelSize = new Avalonia.PixelSize((int)width, (int)height);
+            var dpi = new Avalonia.Vector(96, 96);
+            _bitmapA = new WriteableBitmap(pixelSize, dpi,
+                Avalonia.Platform.PixelFormat.Rgba8888, Avalonia.Platform.AlphaFormat.Unpremul);
+            _bitmapB = new WriteableBitmap(pixelSize, dpi,
+                Avalonia.Platform.PixelFormat.Rgba8888, Avalonia.Platform.AlphaFormat.Unpremul);
+            _bitmapWidth = (int)width;
+            _bitmapHeight = (int)height;
+        }
 
-            using (var buffer = bitmap.Lock())
+        // 이번 프레임에 사용할 버퍼 선택 (이전과 다른 버퍼)
+        var target = _useA ? _bitmapA! : _bitmapB!;
+        _useA = !_useA;
+
+        // Lock → 픽셀 복사 → Unlock
+        using (var buffer = target.Lock())
+        {
+            unsafe
             {
-                unsafe
+                fixed (byte* srcPtr = frameData)
                 {
-                    fixed (byte* srcPtr = frameData)
-                    {
-                        var dst = (byte*)buffer.Address;
-                        var size = (int)width * (int)height * 4;
-                        Buffer.MemoryCopy(srcPtr, dst, size, size);
-                    }
+                    var dst = (byte*)buffer.Address;
+                    var size = (int)width * (int)height * 4;
+                    Buffer.MemoryCopy(srcPtr, dst, size, size);
                 }
             }
+        }
 
-            Services.DebugLogger.Log($"      ✅ Bitmap created, setting PreviewImage property...");
-            PreviewImage = bitmap;
-            Services.DebugLogger.Log($"      ✅ PreviewImage set! PreviewImage is now {(PreviewImage != null ? "NOT NULL" : "NULL")}");
-        });
+        // 항상 다른 객체 참조 → Avalonia가 새 이미지로 인식하여 렌더링
+        PreviewImage = target;
     }
 
     /// <summary>
@@ -139,8 +161,8 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
 
         if (IsPlaying)
         {
-            System.Diagnostics.Debug.WriteLine("   ⏸️ Stopping playback...");
             _playbackTimer.Stop();
+            _playbackClock.Stop();
             IsPlaying = false;
         }
         else
@@ -152,16 +174,17 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            System.Diagnostics.Debug.WriteLine("   ▶️ Starting playback...");
+            System.Diagnostics.Debug.WriteLine("   Starting playback...");
             // 재생 시작: Timeline의 현재 시간부터 시작
             if (_timelineViewModel != null)
             {
                 CurrentTimeMs = _timelineViewModel.CurrentTimeMs;
-                System.Diagnostics.Debug.WriteLine($"   Starting from CurrentTimeMs={CurrentTimeMs}");
             }
+            // Stopwatch 기반 클럭 시작 (누적 오차 방지)
+            _playbackStartTimeMs = CurrentTimeMs;
+            _playbackClock.Restart();
             _playbackTimer.Start();
             IsPlaying = true;
-            System.Diagnostics.Debug.WriteLine("   ✅ Timer started!");
         }
     }
 
@@ -170,25 +193,90 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void OnPlaybackTick(object? sender, ElapsedEventArgs e)
     {
-        // CRITICAL: Playhead 즉시 업데이트 (타이머를 블로킹하지 않음)
-        CurrentTimeMs += (long)(1000.0 / 30.0);
+        // Stopwatch 기반 실제 경과 시간 계산 (누적 오차 없음)
+        var newTimeMs = _playbackStartTimeMs + _playbackClock.ElapsedMilliseconds;
 
-        if (_timelineViewModel != null)
+        // 클립 끝 감지: 재생 시간이 모든 클립의 끝을 넘으면 정지
+        if (_timelineViewModel != null && _timelineViewModel.Clips.Count > 0)
         {
-            _timelineViewModel.CurrentTimeMs = CurrentTimeMs;
+            long maxEndTime = 0;
+            foreach (var clip in _timelineViewModel.Clips)
+            {
+                var clipEnd = clip.StartTimeMs + clip.DurationMs;
+                if (clipEnd > maxEndTime) maxEndTime = clipEnd;
+            }
+
+            if (newTimeMs >= maxEndTime)
+            {
+                _playbackTimer.Stop();
+                _playbackClock.Stop();
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    IsPlaying = false;
+                    CurrentTimeMs = maxEndTime;
+                    if (_timelineViewModel != null)
+                        _timelineViewModel.CurrentTimeMs = maxEndTime;
+                });
+                return;
+            }
         }
 
-        // Fire-and-forget: 렌더링은 백그라운드에서 (await 사용 안 함!)
-        _ = Task.Run(async () =>
+        // CRITICAL: PropertyChanged → XAML 바인딩 업데이트는 UI 스레드에서만 가능
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            CurrentTimeMs = newTimeMs;
+            if (_timelineViewModel != null)
+            {
+                _timelineViewModel.CurrentTimeMs = newTimeMs;
+            }
+        });
+
+        // 렌더링 동시성 제어: 이전 프레임 렌더링 중이면 스킵 (프레임 누적 방지)
+        if (_isRendering) return;
+        _isRendering = true;
+
+        _ = Task.Run(() =>
         {
             try
             {
-                await RenderFrameAsync(CurrentTimeMs);
+                // Rust FFI 렌더링 + 데이터 복사 (배경 스레드, ~2ms)
+                byte[]? frameData = null;
+                uint width = 0, height = 0;
+
+                using var frame = _projectService.RenderFrame(newTimeMs);
+                if (frame != null)
+                {
+                    frameData = frame.Data.ToArray();
+                    width = frame.Width;
+                    height = frame.Height;
+                }
+
+                // Rust 렌더 완료 → 즉시 플래그 해제 (다음 프레임 렌더링 가능)
+                _isRendering = false;
+
+                // UI 업데이트는 Post로 fire-and-forget (UI 스레드 대기 안 함)
+                if (frameData != null)
+                {
+                    var data = frameData;
+                    var w = width;
+                    var h = height;
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        try
+                        {
+                            UpdateBitmap(data, w, h);
+                        }
+                        catch (Exception ex)
+                        {
+                            Services.DebugLogger.Log($"Bitmap update error: {ex.Message}");
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {
-                // 렌더링 에러는 로그만 남기고 재생 계속 (검은 프레임 표시)
-                Services.DebugLogger.Log($"⚠️ Playback error (continuing): {ex.Message}");
+                _isRendering = false;
+                Services.DebugLogger.Log($"Playback render error: {ex.Message}");
             }
         });
     }
@@ -201,6 +289,11 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
         _playbackTimer.Stop();
         IsPlaying = false;
         CurrentTimeMs = 0;
+        _bitmapA = null;
+        _bitmapB = null;
+        _useA = true;
+        _bitmapWidth = 0;
+        _bitmapHeight = 0;
         PreviewImage = null;
     }
 

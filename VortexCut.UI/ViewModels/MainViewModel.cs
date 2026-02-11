@@ -44,6 +44,16 @@ public partial class MainViewModel : ViewModelBase
 
         // Preview와 Timeline 연결
         _preview.SetTimelineViewModel(_timeline);
+
+        // 타임라인에서 재생 중지 요청 시 처리 (무조건 중지)
+        _timeline.RequestStopPlayback = () =>
+        {
+            if (_preview.IsPlaying)
+            {
+                _preview.TogglePlayback();
+            }
+            _timeline.IsPlaying = false;
+        };
     }
 
     /// <summary>
@@ -154,16 +164,33 @@ public partial class MainViewModel : ViewModelBase
                     System.Diagnostics.Debug.WriteLine($"⚠️ Failed to generate thumbnail for {fileName}: {ex.Message}");
                 }
 
+                // 비디오 정보 조회 (Rust FFI)
+                long durationMs = 5000;
+                uint width = 1920, height = 1080;
+                double fps = 30;
+                try
+                {
+                    var videoInfo = await Task.Run(() => RenderService.GetVideoInfo(filePath));
+                    durationMs = videoInfo.DurationMs > 0 ? videoInfo.DurationMs : 5000;
+                    width = videoInfo.Width;
+                    height = videoInfo.Height;
+                    fps = videoInfo.Fps;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"GetVideoInfo failed for {fileName}: {ex.Message}");
+                }
+
                 // Project Bin에 추가
                 var mediaItem = new MediaItem
                 {
                     Name = fileName,
                     FilePath = filePath,
                     Type = MediaType.Video,
-                    DurationMs = 5000, // TODO: FFmpeg로 실제 duration 가져오기
-                    Width = 1920,
-                    Height = 1080,
-                    Fps = 30,
+                    DurationMs = durationMs,
+                    Width = width,
+                    Height = height,
+                    Fps = fps,
                     ThumbnailPath = thumbnailPath
                 };
 

@@ -17,6 +17,11 @@ namespace VortexCut.UI.Controls.Timeline;
 public enum ClipEdge { None, Left, Right }
 
 /// <summary>
+/// 클립 LOD (줌 레벨별 렌더링 복잡도)
+/// </summary>
+public enum ClipLOD { Full, Medium, Minimal }
+
+/// <summary>
 /// 클립 렌더링 영역 (드래그, 선택, Snap 처리)
 /// </summary>
 public class ClipCanvasPanel : Control
@@ -62,6 +67,11 @@ public class ClipCanvasPanel : Control
     private bool _followPlayhead = true;
     private long _lastPlayheadTimeMs = 0;
 
+    /// <summary>
+    /// 가상 스크롤 변경 콜백 (TimelineCanvas에서 설정, header 동기화용)
+    /// </summary>
+    public Action<double>? OnVirtualScrollChanged { get; set; }
+
     public ClipCanvasPanel()
     {
         ClipToBounds = true;
@@ -74,8 +84,26 @@ public class ClipCanvasPanel : Control
 
     public void SetViewModel(TimelineViewModel viewModel)
     {
+        // 이전 구독 해제
+        if (_viewModel != null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        }
+
         _viewModel = viewModel;
         _snapService = new SnapService(viewModel);
+
+        // IsPlaying 변경 감지 → 렌더링 루프 시작
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TimelineViewModel.IsPlaying) ||
+            e.PropertyName == nameof(TimelineViewModel.CurrentTimeMs))
+        {
+            Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Render);
+        }
     }
 
     public void SetClips(IEnumerable<ClipModel> clips)
@@ -136,29 +164,41 @@ public class ClipCanvasPanel : Control
                 Dispatcher.UIThread.Post(InvalidateVisual, Avalonia.Threading.DispatcherPriority.Render);
             }
 
-            // 재생 헤드 자동 스크롤 (Playhead Follow)
-            if (_viewModel != null && _followPlayhead && _viewModel.IsPlaying)
+            // 재생 헤드 자동 스크롤 (Playhead Follow) - 드래그/트림 중에는 스킵
+            if (_viewModel != null && _followPlayhead && _viewModel.IsPlaying && !_isDragging && !_isTrimming)
             {
                 long currentPlayheadTime = _viewModel.CurrentTimeMs;
                 if (currentPlayheadTime != _lastPlayheadTimeMs)
                 {
                     _lastPlayheadTimeMs = currentPlayheadTime;
 
-                    // Playhead가 화면 밖으로 나가면 스크롤
+                    // Playhead가 화면 밖으로 나가면 가상 스크롤
                     double playheadX = TimeToX(currentPlayheadTime);
                     double viewportWidth = Bounds.Width;
 
                     // Playhead가 화면 오른쪽 80%를 넘으면 스크롤
+                    bool scrollChanged = false;
                     if (playheadX > viewportWidth * 0.8)
                     {
                         _scrollOffsetX += (playheadX - viewportWidth * 0.5);
-                        // 부모 TimelineCanvas에 스크롤 업데이트 알림 (TODO)
+                        scrollChanged = true;
                     }
                     // Playhead가 화면 왼쪽으로 나가면 스크롤
                     else if (playheadX < viewportWidth * 0.2 && _scrollOffsetX > 0)
                     {
                         _scrollOffsetX -= (viewportWidth * 0.5 - playheadX);
                         _scrollOffsetX = Math.Max(0, _scrollOffsetX);
+                        scrollChanged = true;
+                    }
+
+                    // TimelineHeader 등 다른 컴포넌트 동기화
+                    // CRITICAL: Render() 내에서 다른 Visual의 InvalidateVisual() 호출 금지
+                    // → Post로 지연시켜 렌더 패스 완료 후 실행
+                    if (scrollChanged)
+                    {
+                        var offset = _scrollOffsetX;
+                        Dispatcher.UIThread.Post(() => OnVirtualScrollChanged?.Invoke(offset),
+                            Avalonia.Threading.DispatcherPriority.Render);
                     }
                 }
 
@@ -168,7 +208,7 @@ public class ClipCanvasPanel : Control
         }
 
         // 배경
-        context.FillRectangle(new SolidColorBrush(Color.Parse("#1E1E1E")), Bounds);
+        context.FillRectangle(RenderResourceCache.BackgroundBrush, Bounds);
 
         // 트랙 배경
         DrawTrackBackgrounds(context);
@@ -200,8 +240,6 @@ public class ClipCanvasPanel : Control
 
     private void DrawTrackBackgrounds(DrawingContext context)
     {
-        var borderPen = new Pen(new SolidColorBrush(Color.Parse("#3A3A3C")), 0.8);
-
         // 비디오 트랙
         for (int i = 0; i < _videoTracks.Count; i++)
         {
@@ -209,92 +247,66 @@ public class ClipCanvasPanel : Control
             double y = i * track.Height;
             var trackRect = new Rect(0, y, Bounds.Width, track.Height);
 
-            // 프로페셔널 그라디언트 배경 (교차 패턴)
+            // 프로페셔널 그라디언트 배경 (교차 패턴) - 캐시된 브러시 사용
             var isEven = i % 2 == 0;
-            var trackGradient = new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(isEven ? Color.Parse("#2D2D30") : Color.Parse("#252527"), 0),
-                    new GradientStop(isEven ? Color.Parse("#252527") : Color.Parse("#1E1E20"), 1)
-                }
-            };
+            var trackGradient = isEven
+                ? RenderResourceCache.GetVerticalGradient(Color.Parse("#2D2D30"), Color.Parse("#252527"))
+                : RenderResourceCache.GetVerticalGradient(Color.Parse("#252527"), Color.Parse("#1E1E20"));
 
             context.FillRectangle(trackGradient, trackRect);
 
             // 미묘한 상단 하이라이트 (3D 효과)
             if (i > 0)
             {
-                var highlightPen = new Pen(
-                    new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
-                    1);
-                context.DrawLine(highlightPen,
+                context.DrawLine(RenderResourceCache.TrackHighlightPen,
                     new Point(0, y),
                     new Point(Bounds.Width, y));
             }
 
-            context.DrawRectangle(borderPen, trackRect);
+            context.DrawRectangle(RenderResourceCache.TrackBorderPen, trackRect);
         }
 
-        // 비디오/오디오 트랙 경계 구분선 (프로페셔널 스타일)
+        // 비디오/오디오 트랙 경계 구분선
         double audioStartY = _videoTracks.Sum(t => t.Height);
         if (_videoTracks.Count > 0 && _audioTracks.Count > 0)
         {
-            // 두꺼운 구분선 그림자
-            var separatorShadowPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
-                4);
-            context.DrawLine(separatorShadowPen,
+            // 구분선: 그림자 → 본체 → 하이라이트
+            context.DrawLine(RenderResourceCache.SeparatorShadowPen,
                 new Point(0, audioStartY + 2),
                 new Point(Bounds.Width, audioStartY + 2));
 
-            // 두꺼운 구분선 본체 (시안색)
-            var separatorPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(180, 80, 220, 255)),
-                3);
-            context.DrawLine(separatorPen,
+            context.DrawLine(RenderResourceCache.SeparatorMainPen,
                 new Point(0, audioStartY),
                 new Point(Bounds.Width, audioStartY));
 
-            // 구분선 상단 하이라이트 (3D 효과)
-            var highlightPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(100, 255, 255, 255)),
-                1);
-            context.DrawLine(highlightPen,
+            context.DrawLine(RenderResourceCache.SeparatorHighlightPen,
                 new Point(0, audioStartY - 1),
                 new Point(Bounds.Width, audioStartY - 1));
 
-            // 라벨 (좌측)
-            var labelTypeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Bold);
+            // 라벨
             var videoLabel = new FormattedText(
                 "VIDEO",
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                labelTypeface,
+                RenderResourceCache.SegoeUIBold,
                 10,
-                new SolidColorBrush(Color.FromArgb(200, 100, 180, 255)));
+                RenderResourceCache.VideoLabelBrush);
 
             var audioLabel = new FormattedText(
                 "AUDIO",
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                labelTypeface,
+                RenderResourceCache.SegoeUIBold,
                 10,
-                new SolidColorBrush(Color.FromArgb(200, 100, 230, 150)));
+                RenderResourceCache.AudioLabelBrush);
 
             // 라벨 배경
             var videoLabelBg = new Rect(5, audioStartY - 15, videoLabel.Width + 8, 12);
-            context.FillRectangle(
-                new SolidColorBrush(Color.FromArgb(200, 30, 30, 32)),
-                videoLabelBg);
+            context.FillRectangle(RenderResourceCache.LabelBgBrush, videoLabelBg);
             context.DrawText(videoLabel, new Point(9, audioStartY - 14));
 
             var audioLabelBg = new Rect(5, audioStartY + 3, audioLabel.Width + 8, 12);
-            context.FillRectangle(
-                new SolidColorBrush(Color.FromArgb(200, 30, 30, 32)),
-                audioLabelBg);
+            context.FillRectangle(RenderResourceCache.LabelBgBrush, audioLabelBg);
             context.DrawText(audioLabel, new Point(9, audioStartY + 4));
         }
 
@@ -305,49 +317,62 @@ public class ClipCanvasPanel : Control
             double y = audioStartY + i * track.Height;
             var trackRect = new Rect(0, y, Bounds.Width, track.Height);
 
-            // 오디오 트랙은 약간 다른 색조 (미묘한 초록 톤)
+            // 오디오 트랙 그라디언트 (캐시)
             var isEven = i % 2 == 0;
-            var audioTrackGradient = new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(isEven ? Color.Parse("#252828") : Color.Parse("#1E2120"), 0),
-                    new GradientStop(isEven ? Color.Parse("#1E2120") : Color.Parse("#181A18"), 1)
-                }
-            };
+            var audioTrackGradient = isEven
+                ? RenderResourceCache.GetVerticalGradient(Color.Parse("#252828"), Color.Parse("#1E2120"))
+                : RenderResourceCache.GetVerticalGradient(Color.Parse("#1E2120"), Color.Parse("#181A18"));
 
             context.FillRectangle(audioTrackGradient, trackRect);
 
             // 미묘한 상단 하이라이트
             if (i > 0)
             {
-                var highlightPen = new Pen(
-                    new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
-                    1);
-                context.DrawLine(highlightPen,
+                context.DrawLine(RenderResourceCache.TrackHighlightPen,
                     new Point(0, y),
                     new Point(Bounds.Width, y));
             }
 
-            context.DrawRectangle(borderPen, trackRect);
+            context.DrawRectangle(RenderResourceCache.TrackBorderPen, trackRect);
         }
     }
 
     private void DrawClips(DrawingContext context)
     {
-        if (_clips.Count > 0)
-        {
-            System.Diagnostics.Debug.WriteLine($"📊 DrawClips: Rendering {_clips.Count} clips, _pixelsPerMs={_pixelsPerMs}");
-        }
+        if (_clips.Count == 0) return;
 
+        // Viewport 시간 범위 계산 (50px 버퍼 포함 - 클립 경계가 부드럽게 나타나도록)
+        long visibleStartMs = XToTime(-50);
+        long visibleEndMs = XToTime(Bounds.Width + 50);
+
+        int renderedCount = 0;
         foreach (var clip in _clips)
         {
+            long clipEndMs = clip.StartTimeMs + clip.DurationMs;
+            // viewport 밖 클립 스킵
+            if (clipEndMs < visibleStartMs || clip.StartTimeMs > visibleEndMs)
+                continue;
+
             bool isSelected = _viewModel?.SelectedClips.Contains(clip) ?? false;
             bool isHovered = clip == _hoveredClip;
             DrawClip(context, clip, isSelected, isHovered);
+            renderedCount++;
         }
+
+        if (_clips.Count > 0)
+        {
+            System.Diagnostics.Debug.WriteLine($"📊 DrawClips: {renderedCount}/{_clips.Count} clips visible, _pixelsPerMs={_pixelsPerMs}");
+        }
+    }
+
+    /// <summary>
+    /// 클립 픽셀 너비에 따른 LOD 결정
+    /// </summary>
+    private static ClipLOD GetClipLOD(double clipWidthPx)
+    {
+        if (clipWidthPx > 80) return ClipLOD.Full;      // 텍스트, 그림자, 아이콘 전부
+        if (clipWidthPx > 20) return ClipLOD.Medium;     // 그라디언트 + 이름만
+        return ClipLOD.Minimal;                           // 단색 박스만
     }
 
     private void DrawClip(DrawingContext context, ClipModel clip, bool isSelected, bool isHovered)
@@ -355,20 +380,16 @@ public class ClipCanvasPanel : Control
         double x = TimeToX(clip.StartTimeMs);
         double width = DurationToWidth(clip.DurationMs);
 
-        System.Diagnostics.Debug.WriteLine($"   🎨 DrawClip: ID={clip.Id}, StartMs={clip.StartTimeMs}, DurationMs={clip.DurationMs}, TrackIndex={clip.TrackIndex}");
-        System.Diagnostics.Debug.WriteLine($"        Calculated: x={x:F2}, width={width:F2}, _pixelsPerMs={_pixelsPerMs}");
-
         // 트랙 Y 위치 계산
         double y = GetTrackYPosition(clip.TrackIndex);
         var track = GetTrackByIndex(clip.TrackIndex);
-        if (track == null)
-        {
-            System.Diagnostics.Debug.WriteLine($"        ⚠️ Track is null for TrackIndex={clip.TrackIndex}!");
-            return;
-        }
+        if (track == null) return;
 
         double height = track.Height - 10;
         var clipRect = new Rect(x, y + 5, Math.Max(width, MinClipWidth), height);
+
+        // LOD 결정
+        var lod = GetClipLOD(clipRect.Width);
 
         // 드래그 중인 클립 감지
         bool isDragging = _isDragging && clip == _draggingClip;
@@ -437,16 +458,46 @@ public class ClipCanvasPanel : Control
             bottomColor = DarkenColor(bottomColor, 0.5);
         }
 
-        var gradientBrush = new LinearGradientBrush
+        // === LOD: Minimal - 단색 박스만 (가장 빠름) ===
+        if (lod == ClipLOD.Minimal)
         {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops = new GradientStops
+            context.FillRectangle(RenderResourceCache.GetSolidBrush(topColor), clipRect);
+            if (isSelected)
             {
-                new GradientStop(topColor, 0),
-                new GradientStop(bottomColor, 1)
+                context.DrawRectangle(RenderResourceCache.ClipBorderMinimalSelected, clipRect);
             }
-        };
+            return;
+        }
+
+        var gradientBrush = RenderResourceCache.GetVerticalGradient(topColor, bottomColor);
+
+        // === LOD: Medium - 그라디언트 + 이름만 (그림자/아이콘/웨이브폼 생략) ===
+        if (lod == ClipLOD.Medium)
+        {
+            context.FillRectangle(gradientBrush, clipRect);
+            var medBorderPen = isSelected
+                ? RenderResourceCache.ClipBorderMediumSelected
+                : RenderResourceCache.ClipBorderMediumNormal;
+            context.DrawRectangle(medBorderPen, clipRect);
+
+            // 클립 이름만 표시
+            if (width > 40)
+            {
+                var fileName = System.IO.Path.GetFileNameWithoutExtension(clip.FilePath);
+                if (fileName.Length > 15) fileName = fileName.Substring(0, 12) + "...";
+                var text = new FormattedText(
+                    fileName,
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    RenderResourceCache.SegoeUIBold,
+                    11,
+                    RenderResourceCache.WhiteBrush);
+                context.DrawText(text, new Point(x + 4, y + 9));
+            }
+            return;
+        }
+
+        // === LOD: Full - 아래부터 기존 전체 렌더링 ===
 
         // 클립 그림자 (DaVinci Resolve 스타일)
         var shadowOpacity = (isDragging || isTrimming) ? (byte)120 : (byte)80;
@@ -457,7 +508,7 @@ public class ClipCanvasPanel : Control
             clipRect.Width,
             clipRect.Height);
         context.FillRectangle(
-            new SolidColorBrush(Color.FromArgb(shadowOpacity, 0, 0, 0)),
+            RenderResourceCache.GetSolidBrush(Color.FromArgb(shadowOpacity, 0, 0, 0)),
             shadowRect);
 
         // 드래그 중 배경 추가 강조
@@ -468,9 +519,7 @@ public class ClipCanvasPanel : Control
                 clipRect.Y - 2,
                 clipRect.Width + 4,
                 clipRect.Height + 4);
-            context.FillRectangle(
-                new SolidColorBrush(Color.FromArgb(60, 80, 220, 255)),
-                dragHighlightRect);
+            context.FillRectangle(RenderResourceCache.DragHighlightBrush, dragHighlightRect);
         }
 
         context.FillRectangle(gradientBrush, clipRect);
@@ -516,8 +565,9 @@ public class ClipCanvasPanel : Control
                 clipRect.Y - 4,
                 clipRect.Width + 8,
                 clipRect.Height + 8);
-            var glowBrush1 = new SolidColorBrush(Color.FromArgb((byte)(pulseIntensity * 60), 255, 255, 255));
-            context.FillRectangle(glowBrush1, glowRect1);
+            context.FillRectangle(
+                RenderResourceCache.GetSolidBrush(Color.FromArgb((byte)(pulseIntensity * 60), 255, 255, 255)),
+                glowRect1);
 
             // 중간 글로우
             var glowRect2 = new Rect(
@@ -525,8 +575,9 @@ public class ClipCanvasPanel : Control
                 clipRect.Y - 2,
                 clipRect.Width + 4,
                 clipRect.Height + 4);
-            var glowBrush2 = new SolidColorBrush(Color.FromArgb((byte)(pulseIntensity * 100), 255, 255, 255));
-            context.FillRectangle(glowBrush2, glowRect2);
+            context.FillRectangle(
+                RenderResourceCache.GetSolidBrush(Color.FromArgb((byte)(pulseIntensity * 100), 255, 255, 255)),
+                glowRect2);
 
             // 내부 글로우 (가장 밝음)
             var glowRect3 = new Rect(
@@ -534,8 +585,9 @@ public class ClipCanvasPanel : Control
                 clipRect.Y - 1,
                 clipRect.Width + 2,
                 clipRect.Height + 2);
-            var glowBrush3 = new SolidColorBrush(Color.FromArgb((byte)(pulseIntensity * 150), 80, 220, 255));
-            context.FillRectangle(glowBrush3, glowRect3);
+            context.FillRectangle(
+                RenderResourceCache.GetSolidBrush(Color.FromArgb((byte)(pulseIntensity * 150), 80, 220, 255)),
+                glowRect3);
         }
 
         // 호버 효과 (선택되지 않은 클립만)
@@ -546,8 +598,7 @@ public class ClipCanvasPanel : Control
                 clipRect.Y - 1,
                 clipRect.Width + 2,
                 clipRect.Height + 2);
-            var hoverBrush = new SolidColorBrush(Color.FromArgb(40, 0, 122, 204)); // 미묘한 파란색
-            context.FillRectangle(hoverBrush, hoverRect);
+            context.FillRectangle(RenderResourceCache.HoverBrush, hoverRect);
         }
 
         // 오디오 웨이브폼 (간단한 시뮬레이션)
@@ -557,20 +608,16 @@ public class ClipCanvasPanel : Control
         }
 
         // 테두리 (선택된 클립은 밝은 하얀색, 일반은 미묘한 회색)
-        var borderPen = isSelected
-            ? new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 2.5)
-            : new Pen(new SolidColorBrush(Color.Parse("#5A5A5C")), 1.2);
-
-        context.DrawRectangle(borderPen, clipRect);
+        context.DrawRectangle(
+            isSelected ? RenderResourceCache.ClipBorderSelected : RenderResourceCache.ClipBorderNormal,
+            clipRect);
 
         // 트림 핸들 시각화 (양 끝 10px 영역)
         if (isSelected && width > 30)
         {
             // 왼쪽 트림 핸들
             var leftHandleRect = new Rect(clipRect.X, clipRect.Y, 2, clipRect.Height);
-            context.FillRectangle(
-                new SolidColorBrush(Color.FromRgb(255, 200, 80)),
-                leftHandleRect);
+            context.FillRectangle(RenderResourceCache.TrimHandleBrush, leftHandleRect);
 
             // 오른쪽 트림 핸들
             var rightHandleRect = new Rect(
@@ -578,9 +625,7 @@ public class ClipCanvasPanel : Control
                 clipRect.Y,
                 2,
                 clipRect.Height);
-            context.FillRectangle(
-                new SolidColorBrush(Color.FromRgb(255, 200, 80)),
-                rightHandleRect);
+            context.FillRectangle(RenderResourceCache.TrimHandleBrush, rightHandleRect);
         }
 
         // 클립 타입 아이콘 (좌측 상단)
@@ -591,22 +636,15 @@ public class ClipCanvasPanel : Control
                 iconText,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Normal),
+                RenderResourceCache.SegoeUI,
                 14,
-                Brushes.White);
+                RenderResourceCache.WhiteBrush);
 
-            // 아이콘 배경 (작은 원형 배지)
+            // 아이콘 배경
             var iconBgRect = new Rect(x + 4, y + 4, 20, 20);
-            var iconBgBrush = new RadialGradientBrush
-            {
-                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(Color.FromArgb(200, 0, 0, 0), 0),
-                    new GradientStop(Color.FromArgb(150, 0, 0, 0), 1)
-                }
-            };
-            context.FillRectangle(iconBgBrush, iconBgRect);
+            context.FillRectangle(
+                RenderResourceCache.GetSolidBrush(Color.FromArgb(180, 0, 0, 0)),
+                iconBgRect);
             context.DrawText(iconFormatted, new Point(x + 7, y + 5));
         }
 
@@ -621,24 +659,15 @@ public class ClipCanvasPanel : Control
                 fileName,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Bold),
+                RenderResourceCache.SegoeUIBold,
                 12,
-                Brushes.White);
+                RenderResourceCache.WhiteBrush);
 
-            // 텍스트 배경 (더 선명한 그라디언트)
+            // 텍스트 배경
             var textBgRect = new Rect(x + 28, y + 6, text.Width + 8, text.Height + 6);
-            var textBgGradient = new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(Color.FromArgb(200, 0, 0, 0), 0),
-                    new GradientStop(Color.FromArgb(150, 0, 0, 0), 0.8),
-                    new GradientStop(Color.FromArgb(0, 0, 0, 0), 1)
-                }
-            };
-            context.FillRectangle(textBgGradient, textBgRect);
+            context.FillRectangle(
+                RenderResourceCache.GetSolidBrush(Color.FromArgb(180, 0, 0, 0)),
+                textBgRect);
 
             // 텍스트
             context.DrawText(text, new Point(x + 32, y + 9));
@@ -652,24 +681,15 @@ public class ClipCanvasPanel : Control
                     durationText,
                     System.Globalization.CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
-                    new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Bold),
+                    RenderResourceCache.SegoeUIBold,
                     11,
-                    new SolidColorBrush(Color.FromRgb(255, 220, 80)));
+                    RenderResourceCache.DurationTextBrush);
 
                 var durationX = x + width - durationFormatted.Width - 10;
                 var durationBgRect = new Rect(durationX - 4, y + 6, durationFormatted.Width + 8, durationFormatted.Height + 6);
-                var durationBgGradient = new LinearGradientBrush
-                {
-                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                    EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
-                    GradientStops = new GradientStops
-                    {
-                        new GradientStop(Color.FromArgb(0, 0, 0, 0), 0),
-                        new GradientStop(Color.FromArgb(150, 0, 0, 0), 0.2),
-                        new GradientStop(Color.FromArgb(200, 0, 0, 0), 1)
-                    }
-                };
-                context.FillRectangle(durationBgGradient, durationBgRect);
+                context.FillRectangle(
+                    RenderResourceCache.GetSolidBrush(Color.FromArgb(180, 0, 0, 0)),
+                    durationBgRect);
                 context.DrawText(durationFormatted, new Point(durationX, y + 9));
             }
         }
@@ -684,9 +704,7 @@ public class ClipCanvasPanel : Control
         if (shouldDimClip)
         {
             // 대각선 줄무늬 패턴
-            var stripesPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(60, 0, 0, 0)),
-                2);
+            var stripesPen = RenderResourceCache.GetPen(Color.FromArgb(60, 0, 0, 0), 2);
 
             for (double stripeX = clipRect.Left; stripeX < clipRect.Right; stripeX += 8)
             {
@@ -696,9 +714,7 @@ public class ClipCanvasPanel : Control
             }
 
             // 반투명 검정 오버레이
-            context.FillRectangle(
-                new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)),
-                clipRect);
+            context.FillRectangle(RenderResourceCache.MuteOverlayBrush, clipRect);
 
             // 뮤트 아이콘 (중앙)
             if (width > 60 && height > 30)
@@ -721,12 +737,12 @@ public class ClipCanvasPanel : Control
                 }
 
                 context.DrawGeometry(
-                    new SolidColorBrush(Color.FromArgb(200, 255, 80, 80)),
-                    new Pen(Brushes.White, 1.5),
+                    RenderResourceCache.MuteIconBrush,
+                    RenderResourceCache.ClipBorderMinimalSelected,
                     muteGeometry);
 
                 // X 표시
-                var xPen = new Pen(new SolidColorBrush(Color.FromRgb(255, 80, 80)), 2.5);
+                var xPen = RenderResourceCache.GetPen(Color.FromRgb(255, 80, 80), 2.5);
                 context.DrawLine(xPen,
                     new Point(iconX + 3, iconY - 8),
                     new Point(iconX + 12, iconY + 8));
@@ -775,9 +791,7 @@ public class ClipCanvasPanel : Control
             var bottomY = centerY + amplitude;
 
             // 밝은 초록색 (DaVinci Resolve 스타일)
-            var pen = new Pen(
-                new SolidColorBrush(Color.FromArgb(200, 130, 230, 130)),
-                1.4);
+            var pen = RenderResourceCache.GetPen(Color.FromArgb(200, 130, 230, 130), 1.4);
 
             context.DrawLine(pen,
                 new Point(x, topY),
@@ -785,10 +799,7 @@ public class ClipCanvasPanel : Control
         }
 
         // 중앙선 (가이드라인)
-        var centerLinePen = new Pen(
-            new SolidColorBrush(Color.FromArgb(70, 160, 255, 160)),
-            0.6);
-        context.DrawLine(centerLinePen,
+        context.DrawLine(RenderResourceCache.WaveformCenterPen,
             new Point(clipRect.Left, centerY),
             new Point(clipRect.Right, centerY));
     }
@@ -826,8 +837,8 @@ public class ClipCanvasPanel : Control
             ctx.EndFigure(true);
         }
         context.DrawGeometry(
-            new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
-            new Pen(new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)), 0.8),
+            RenderResourceCache.GetSolidBrush(Color.FromArgb(120, 255, 255, 255)),
+            RenderResourceCache.GetPen(Color.FromArgb(180, 255, 255, 255), 0.8),
             fadeInIconGeometry);
 
         // 페이드 아웃 (우측)
@@ -860,8 +871,8 @@ public class ClipCanvasPanel : Control
             ctx.EndFigure(true);
         }
         context.DrawGeometry(
-            new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
-            new Pen(new SolidColorBrush(Color.FromArgb(180, 255, 255, 255)), 0.8),
+            RenderResourceCache.GetSolidBrush(Color.FromArgb(120, 255, 255, 255)),
+            RenderResourceCache.GetPen(Color.FromArgb(180, 255, 255, 255), 0.8),
             fadeOutIconGeometry);
     }
 
@@ -914,16 +925,10 @@ public class ClipCanvasPanel : Control
                 }
 
                 // 연결선 그림자
-                var lineShadowPen = new Pen(
-                    new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)),
-                    2);
-                context.DrawGeometry(null, lineShadowPen, curveGeometry);
+                context.DrawGeometry(null, RenderResourceCache.KeyframeShadowPen, curveGeometry);
 
                 // 연결선 본체 (밝은 시안색)
-                var linePen = new Pen(
-                    new SolidColorBrush(Color.FromArgb(180, 80, 220, 255)),
-                    1.5);
-                context.DrawGeometry(null, linePen, curveGeometry);
+                context.DrawGeometry(null, RenderResourceCache.KeyframeLinePen, curveGeometry);
             }
         }
 
@@ -976,10 +981,7 @@ public class ClipCanvasPanel : Control
             ctx.LineTo(new Point(x - Size / 2 + 1, y + 1));
             ctx.EndFigure(true);
         }
-        context.DrawGeometry(
-            new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
-            null,
-            shadowGeometry);
+        context.DrawGeometry(RenderResourceCache.PlayheadShadowBrush, null, shadowGeometry);
 
         // 다이아몬드 본체 (그라디언트)
         var geometry = new StreamGeometry();
@@ -992,24 +994,13 @@ public class ClipCanvasPanel : Control
             ctx.EndFigure(true);
         }
 
-        var diamondGradient = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops = new GradientStops
-            {
-                new GradientStop(color, 0),
-                new GradientStop(Color.FromRgb(
-                    (byte)Math.Max(0, color.R - 60),
-                    (byte)Math.Max(0, color.G - 60),
-                    (byte)Math.Max(0, color.B - 60)), 1)
-            }
-        };
+        var darkerColor = Color.FromRgb(
+            (byte)Math.Max(0, color.R - 60),
+            (byte)Math.Max(0, color.G - 60),
+            (byte)Math.Max(0, color.B - 60));
+        var diamondGradient = RenderResourceCache.GetVerticalGradient(color, darkerColor);
 
-        context.DrawGeometry(
-            diamondGradient,
-            new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1.5),
-            geometry);
+        context.DrawGeometry(diamondGradient, RenderResourceCache.DiamondBorderPen, geometry);
 
         // 내부 하이라이트 (반짝임 효과)
         var highlightGeometry = new StreamGeometry();
@@ -1018,10 +1009,7 @@ public class ClipCanvasPanel : Control
             ctx.BeginFigure(new Point(x, y - Size / 2 + 2), false);
             ctx.LineTo(new Point(x + Size / 4, y - Size / 4 + 1));
         }
-        context.DrawGeometry(
-            null,
-            new Pen(new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)), 1.2),
-            highlightGeometry);
+        context.DrawGeometry(null, RenderResourceCache.DiamondHighlightPen, highlightGeometry);
     }
 
     /// <summary>
@@ -1029,11 +1017,20 @@ public class ClipCanvasPanel : Control
     /// </summary>
     private void DrawLinkedClipConnections(DrawingContext context)
     {
+        // Viewport 시간 범위 계산
+        long visibleStartMs = XToTime(-50);
+        long visibleEndMs = XToTime(Bounds.Width + 50);
+
         // 비디오 클립 중 LinkedAudioClipId가 있는 클립 찾기
         var linkedVideoClips = _clips.Where(c => c.LinkedAudioClipId.HasValue).ToList();
 
         foreach (var videoClip in linkedVideoClips)
         {
+            // viewport 밖 비디오 클립 스킵
+            long videoEndMs = videoClip.StartTimeMs + videoClip.DurationMs;
+            if (videoEndMs < visibleStartMs || videoClip.StartTimeMs > visibleEndMs)
+                continue;
+
             var audioClip = _clips.FirstOrDefault(c => c.Id == videoClip.LinkedAudioClipId);
             if (audioClip == null) continue;
 
@@ -1054,34 +1051,19 @@ public class ClipCanvasPanel : Control
             double audioCenterY = audioY + audioHeight / 2 + 5;
 
             // 연결선 (점선, 반투명 시안색)
-            var linkPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(120, 80, 220, 255)),
-                1.5)
-            {
-                DashStyle = new DashStyle(new double[] { 3, 3 }, 0)
-            };
-
-            context.DrawLine(linkPen,
+            context.DrawLine(RenderResourceCache.LinkLinePen,
                 new Point(videoX, videoCenterY),
                 new Point(audioX, audioCenterY));
 
             // 연결 아이콘 (작은 원 - 비디오 클립 쪽)
             var videoIconRect = new Rect(videoX - 4, videoCenterY - 4, 8, 8);
-            context.FillRectangle(
-                new SolidColorBrush(Color.FromRgb(80, 220, 255)),
-                videoIconRect);
-            context.DrawRectangle(
-                new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1),
-                videoIconRect);
+            context.FillRectangle(RenderResourceCache.LinkBrush, videoIconRect);
+            context.DrawRectangle(RenderResourceCache.LinkNodeBorderPen, videoIconRect);
 
             // 연결 아이콘 (작은 원 - 오디오 클립 쪽)
             var audioIconRect = new Rect(audioX - 4, audioCenterY - 4, 8, 8);
-            context.FillRectangle(
-                new SolidColorBrush(Color.FromRgb(80, 220, 255)),
-                audioIconRect);
-            context.DrawRectangle(
-                new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1),
-                audioIconRect);
+            context.FillRectangle(RenderResourceCache.LinkBrush, audioIconRect);
+            context.DrawRectangle(RenderResourceCache.LinkNodeBorderPen, audioIconRect);
         }
     }
 
@@ -1128,35 +1110,27 @@ public class ClipCanvasPanel : Control
             double glowIntensity = 0.5 + (Math.Sin(_selectionPulsePhase * 2) * 0.5 + 0.5) * 0.5;
 
             // 외부 글로우 (더 넓고 약함)
-            var outerGlowPen = new Pen(
-                new SolidColorBrush(Color.FromArgb((byte)(glowIntensity * 100), 255, 80, 80)),
-                8);
+            var outerGlowPen = RenderResourceCache.GetPen(
+                Color.FromArgb((byte)(glowIntensity * 100), 255, 80, 80), 8);
             context.DrawLine(outerGlowPen,
                 new Point(x, 0),
                 new Point(x, Bounds.Height));
 
             // 중간 글로우
-            var midGlowPen = new Pen(
-                new SolidColorBrush(Color.FromArgb((byte)(glowIntensity * 150), 255, 60, 60)),
-                5);
+            var midGlowPen = RenderResourceCache.GetPen(
+                Color.FromArgb((byte)(glowIntensity * 150), 255, 60, 60), 5);
             context.DrawLine(midGlowPen,
                 new Point(x, 0),
                 new Point(x, Bounds.Height));
         }
 
         // Playhead 그림자 (깊이감)
-        var shadowPen = new Pen(
-            new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
-            3);
-        context.DrawLine(shadowPen,
+        context.DrawLine(RenderResourceCache.PlayheadShadowPen,
             new Point(x + 1.5, 0),
             new Point(x + 1.5, Bounds.Height));
 
         // Playhead 본체 (밝은 빨간색)
-        var playheadPen = new Pen(
-            new SolidColorBrush(Color.FromRgb(255, 50, 50)),
-            2.5);
-        context.DrawLine(playheadPen,
+        context.DrawLine(RenderResourceCache.PlayheadBodyPen,
             new Point(x, 0),
             new Point(x, Bounds.Height));
 
@@ -1179,25 +1153,12 @@ public class ClipCanvasPanel : Control
             ctx.LineTo(new Point(x + 9, -11));
             ctx.EndFigure(true);
         }
-        context.DrawGeometry(
-            new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
-            null,
-            headShadowGeometry);
+        context.DrawGeometry(RenderResourceCache.PlayheadShadowBrush, null, headShadowGeometry);
 
         // 헤드 본체 (그라디언트)
-        var headGradient = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops = new GradientStops
-            {
-                new GradientStop(Color.FromRgb(255, 80, 80), 0),
-                new GradientStop(Color.FromRgb(255, 40, 40), 1)
-            }
-        };
         context.DrawGeometry(
-            headGradient,
-            new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 1.2),
+            RenderResourceCache.PlayheadHeadGradient,
+            RenderResourceCache.PlayheadHeadBorderPen,
             headGeometry);
     }
 
@@ -1227,7 +1188,6 @@ public class ClipCanvasPanel : Control
             $"🎬 Track: {track.Name}"
         };
 
-        var typeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Normal);
         const double fontSize = 11;
         const double lineHeight = 16;
         const double padding = 8;
@@ -1240,9 +1200,9 @@ public class ClipCanvasPanel : Control
                 line,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                typeface,
+                RenderResourceCache.SegoeUI,
                 fontSize,
-                Brushes.White);
+                RenderResourceCache.WhiteBrush);
             maxTextWidth = Math.Max(maxTextWidth, text.Width);
         }
 
@@ -1259,28 +1219,13 @@ public class ClipCanvasPanel : Control
 
         // 툴팁 배경 (프로페셔널 그라디언트 + 그림자)
         var shadowRect = new Rect(tooltipX + 3, tooltipY + 3, tooltipWidth, tooltipHeight);
-        context.FillRectangle(
-            new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)),
-            shadowRect);
+        context.FillRectangle(RenderResourceCache.TooltipShadowBrush, shadowRect);
 
         var bgRect = new Rect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
-        var bgGradient = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops = new GradientStops
-            {
-                new GradientStop(Color.FromArgb(240, 50, 50, 52), 0),
-                new GradientStop(Color.FromArgb(250, 40, 40, 42), 1)
-            }
-        };
-        context.FillRectangle(bgGradient, bgRect);
+        context.FillRectangle(RenderResourceCache.TooltipBgGradient, bgRect);
 
         // 테두리 (시안색)
-        var borderPen = new Pen(
-            new SolidColorBrush(Color.FromArgb(200, 80, 220, 255)),
-            1.5);
-        context.DrawRectangle(borderPen, bgRect);
+        context.DrawRectangle(RenderResourceCache.TooltipBorderPen, bgRect);
 
         // 텍스트 렌더링
         double textY = tooltipY + padding;
@@ -1290,9 +1235,9 @@ public class ClipCanvasPanel : Control
                 line,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                typeface,
+                RenderResourceCache.SegoeUI,
                 fontSize,
-                Brushes.White);
+                RenderResourceCache.WhiteBrush);
 
             context.DrawText(text, new Point(tooltipX + padding, textY));
             textY += lineHeight;
@@ -1312,8 +1257,8 @@ public class ClipCanvasPanel : Control
         }
 
         context.DrawGeometry(
-            new SolidColorBrush(Color.FromArgb(250, 40, 40, 42)),
-            new Pen(new SolidColorBrush(Color.FromArgb(200, 80, 220, 255)), 1.5),
+            RenderResourceCache.TooltipBgBrush,
+            RenderResourceCache.TooltipArrowBorderPen,
             arrowGeometry);
     }
 
@@ -1322,7 +1267,6 @@ public class ClipCanvasPanel : Control
     /// </summary>
     private void DrawPerformanceInfo(DrawingContext context)
     {
-        var typeface = new Typeface("Consolas", FontStyle.Normal, FontWeight.Normal);
         const double fontSize = 10;
 
         var playbackStatus = _viewModel?.IsPlaying == true ? "▶ Playing" : "⏸ Paused";
@@ -1345,9 +1289,9 @@ public class ClipCanvasPanel : Control
                 line,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                typeface,
+                RenderResourceCache.Consolas,
                 fontSize,
-                Brushes.White);
+                RenderResourceCache.WhiteBrush);
             maxTextWidth = Math.Max(maxTextWidth, text.Width);
         }
 
@@ -1360,17 +1304,7 @@ public class ClipCanvasPanel : Control
 
         // 배경 (반투명 그라디언트)
         var bgRect = new Rect(infoX, infoY, infoWidth, infoHeight);
-        var bgGradient = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops = new GradientStops
-            {
-                new GradientStop(Color.FromArgb(200, 30, 30, 32), 0),
-                new GradientStop(Color.FromArgb(220, 25, 25, 27), 1)
-            }
-        };
-        context.FillRectangle(bgGradient, bgRect);
+        context.FillRectangle(RenderResourceCache.PerfInfoBgGradient, bgRect);
 
         // 테두리 (FPS에 따라 색상 변경)
         var borderColor = _currentFps >= 55
@@ -1379,10 +1313,10 @@ public class ClipCanvasPanel : Control
                 ? Color.FromArgb(150, 255, 220, 80)  // 노랑 (보통 FPS)
                 : Color.FromArgb(150, 255, 100, 100); // 빨강 (낮은 FPS)
 
-        var borderPen = new Pen(new SolidColorBrush(borderColor), 1.5);
-        context.DrawRectangle(borderPen, bgRect);
+        context.DrawRectangle(RenderResourceCache.GetPen(borderColor, 1.5), bgRect);
 
         // 텍스트 렌더링
+        var textBrush = RenderResourceCache.GetSolidBrush(Color.FromRgb(144, 238, 144));
         double textY = infoY + padding;
         foreach (var line in infoLines)
         {
@@ -1390,9 +1324,9 @@ public class ClipCanvasPanel : Control
                 line,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                typeface,
+                RenderResourceCache.Consolas,
                 fontSize,
-                Brushes.LightGreen);
+                textBrush);
 
             context.DrawText(text, new Point(infoX + padding, textY));
             textY += lineHeight;
@@ -1414,49 +1348,21 @@ public class ClipCanvasPanel : Control
                 0,
                 thresholdX * 2,
                 Bounds.Height);
-            var thresholdGradient = new RadialGradientBrush
-            {
-                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(Color.FromArgb(40, 255, 220, 80), 0),
-                    new GradientStop(Color.FromArgb(15, 255, 220, 80), 0.5),
-                    new GradientStop(Color.FromArgb(0, 255, 220, 80), 1)
-                }
-            };
-            context.FillRectangle(thresholdGradient, thresholdRect);
+            context.FillRectangle(RenderResourceCache.SnapThresholdGradient, thresholdRect);
         }
 
         // Snap 가이드라인 그림자
-        var shadowPen = new Pen(
-            new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
-            3)
-        {
-            DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
-        };
-        context.DrawLine(shadowPen,
+        context.DrawLine(RenderResourceCache.SnapShadowPen,
             new Point(x + 1.5, 0),
             new Point(x + 1.5, Bounds.Height));
 
         // Snap 가이드라인 글로우
-        var glowPen = new Pen(
-            new SolidColorBrush(Color.FromArgb(80, 255, 220, 80)),
-            5)
-        {
-            DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
-        };
-        context.DrawLine(glowPen,
+        context.DrawLine(RenderResourceCache.SnapGlowPen,
             new Point(x, 0),
             new Point(x, Bounds.Height));
 
         // Snap 가이드라인 본체 (밝은 황금색)
-        var pen = new Pen(
-            new SolidColorBrush(Color.FromRgb(255, 220, 80)),
-            2)
-        {
-            DashStyle = new DashStyle(new double[] { 4, 4 }, 0)
-        };
-        context.DrawLine(pen,
+        context.DrawLine(RenderResourceCache.SnapMainPen,
             new Point(x, 0),
             new Point(x, Bounds.Height));
 
@@ -1471,10 +1377,7 @@ public class ClipCanvasPanel : Control
             ctx.QuadraticBezierTo(new Point(x + 8, 25), new Point(x + 8, 20));
             ctx.LineTo(new Point(x + 8, 10));
         }
-        context.DrawGeometry(
-            null,
-            new Pen(new SolidColorBrush(Color.FromRgb(255, 220, 80)), 2.5),
-            snapIconGeometry);
+        context.DrawGeometry(null, RenderResourceCache.SnapMagnetPen, snapIconGeometry);
 
         // 시간 델타 표시 (Snap 위치와 드래그 중인 클립의 시간 차이)
         if (_draggingClip != null && _viewModel != null)
@@ -1490,14 +1393,13 @@ public class ClipCanvasPanel : Control
                     ? $"+{FormatTime(Math.Abs(deltaMs))}"
                     : $"-{FormatTime(Math.Abs(deltaMs))}";
 
-                var typeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.Bold);
                 var formattedText = new FormattedText(
                     deltaText,
                     System.Globalization.CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
-                    typeface,
+                    RenderResourceCache.SegoeUIBold,
                     11,
-                    Brushes.White);
+                    RenderResourceCache.WhiteBrush);
 
                 // 배경 박스 (반투명 검정)
                 var textRect = new Rect(
@@ -1506,15 +1408,10 @@ public class ClipCanvasPanel : Control
                     formattedText.Width + 12,
                     formattedText.Height + 6);
 
-                context.FillRectangle(
-                    new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
-                    textRect);
+                context.FillRectangle(RenderResourceCache.SnapDeltaBgBrush, textRect);
 
                 // 테두리 (황금색)
-                context.DrawRectangle(
-                    null,
-                    new Pen(new SolidColorBrush(Color.FromRgb(255, 220, 80)), 1.5),
-                    textRect);
+                context.DrawRectangle(null, RenderResourceCache.SnapDeltaBorderPen, textRect);
 
                 // 텍스트
                 context.DrawText(
@@ -1617,6 +1514,13 @@ public class ClipCanvasPanel : Control
                 return;
             }
 
+            // 재생 중이면 즉시 중지 (직접 IsPlaying 설정 + 콜백으로 타이머도 중지)
+            if (_viewModel != null && _viewModel.IsPlaying)
+            {
+                _viewModel.IsPlaying = false;
+                _viewModel.RequestStopPlayback?.Invoke();
+            }
+
             // 일반 모드: 클립 선택/드래그/트림
             _selectedClip = GetClipAtPosition(point);
 
@@ -1671,10 +1575,13 @@ public class ClipCanvasPanel : Control
             }
             else
             {
-                // 빈 공간 클릭: 선택 해제
+                // 빈 공간 클릭: 선택 해제 + Playhead 이동
                 if (_viewModel != null)
                 {
                     _viewModel.SelectedClips.Clear();
+                    // 클릭 위치로 Playhead(CurrentTimeMs) 이동
+                    long clickedTimeMs = XToTime(point.X);
+                    _viewModel.CurrentTimeMs = Math.Max(0, clickedTimeMs);
                 }
             }
 

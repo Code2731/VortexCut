@@ -13,6 +13,7 @@ namespace VortexCut.UI.Controls.Timeline;
 public class TimelineHeader : Control
 {
     private const double HeaderHeight = 80;
+    private const double TrackHeaderWidth = 60; // Grid Column 0 너비 (트랙 리스트)
     private TimelineViewModel? _viewModel;
     private double _pixelsPerMs = 0.1;
     private double _scrollOffsetX = 0;
@@ -258,48 +259,57 @@ public class TimelineHeader : Control
         context.DrawText(maxLabel, new Point(barX + barWidth - maxLabel.Width, barY + barHeight + 2));
     }
 
+    /// <summary>
+    /// 줌 레벨에 적응하는 동적 시간 눈금
+    /// - 줌 아웃: 10초/30초/1분 간격, 줌 인: 100ms/500ms 간격
+    /// - 보이는 영역만 렌더링 (무한 타임라인 대응)
+    /// </summary>
     private void DrawTimeRuler(DrawingContext context)
     {
         var typeface = new Typeface("Segoe UI", FontStyle.Normal, FontWeight.SemiBold);
         var fontSize = 10;
 
-        // 작은 눈금 (100ms 간격)
+        // 보이는 시간 범위 계산
+        long visibleStartMs = Math.Max(0, XToTime(0));
+        long visibleEndMs = XToTime(Bounds.Width) + 1000; // 여유분
+
+        // 줌 레벨에 따라 최적 눈금 간격 선택 (주눈금 ~100-180px 간격 목표)
+        long majorIntervalMs = CalculateMajorInterval();
+        long minorIntervalMs = majorIntervalMs / 5;
+        if (minorIntervalMs < 10) minorIntervalMs = 10; // 최소 10ms
+
+        // 소눈금
         var smallTickPen = new Pen(new SolidColorBrush(Color.Parse("#555555")), 1);
-        for (int i = 0; i < 1000; i++)
+        long firstMinor = (visibleStartMs / minorIntervalMs) * minorIntervalMs;
+        for (long timeMs = firstMinor; timeMs <= visibleEndMs; timeMs += minorIntervalMs)
         {
-            long timeMs = i * 100; // 100ms 간격
+            if (timeMs % majorIntervalMs == 0) continue; // 주눈금 위치는 건너뜀
+
             double x = TimeToX(timeMs);
+            if (x < 0 || x > Bounds.Width) continue;
 
-            if (x < 0 || x > Bounds.Width)
-                continue;
-
-            // 작은 눈금 (5px)
-            if (i % 10 != 0) // 1초 단위는 큰 눈금으로
-            {
-                context.DrawLine(smallTickPen,
-                    new Point(x, HeaderHeight - 5),
-                    new Point(x, HeaderHeight));
-            }
+            context.DrawLine(smallTickPen,
+                new Point(x, HeaderHeight - 5),
+                new Point(x, HeaderHeight));
         }
 
-        // 큰 눈금 및 텍스트 (1초 간격)
+        // 주눈금 + 시간 라벨
         var bigTickPen = new Pen(new SolidColorBrush(Color.Parse("#AAAAAA")), 1.5);
-        for (int i = 0; i < 100; i++)
+        long firstMajor = (visibleStartMs / majorIntervalMs) * majorIntervalMs;
+        for (long timeMs = firstMajor; timeMs <= visibleEndMs; timeMs += majorIntervalMs)
         {
-            long timeMs = i * 1000; // 1초 간격
             double x = TimeToX(timeMs);
+            if (x < 0 || x > Bounds.Width) continue;
 
-            if (x < 0 || x > Bounds.Width)
-                continue;
-
-            // 큰 눈금 (12px)
+            // 주눈금 (12px)
             context.DrawLine(bigTickPen,
                 new Point(x, HeaderHeight - 12),
                 new Point(x, HeaderHeight));
 
-            // 시간 텍스트 (SemiBold, 배경 추가)
+            // 시간 라벨
+            var label = FormatTimeLabel(timeMs, majorIntervalMs);
             var text = new FormattedText(
-                $"{i}s",
+                label,
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
                 typeface,
@@ -314,6 +324,55 @@ public class TimelineHeader : Control
 
             context.DrawText(text, new Point(x + 3, HeaderHeight - 25));
         }
+    }
+
+    /// <summary>
+    /// 줌 레벨에 따라 최적 주눈금 간격(ms) 계산
+    /// 목표: 주눈금 사이 ~100-180px
+    /// </summary>
+    private long CalculateMajorInterval()
+    {
+        double targetPx = 140.0;
+        double targetMs = targetPx / _pixelsPerMs;
+
+        // "보기 좋은" 간격 목록 (ms)
+        long[] nice = { 100, 200, 500, 1000, 2000, 5000, 10000, 15000,
+                        30000, 60000, 120000, 300000, 600000, 1800000, 3600000 };
+
+        foreach (var interval in nice)
+        {
+            if (interval >= targetMs) return interval;
+        }
+        return 3600000; // 1시간
+    }
+
+    /// <summary>
+    /// 시간 라벨 포맷 (줌 레벨별 적응)
+    /// 짧은 간격: "0.1s", "1.5s" / 긴 간격: "1:30", "10:00"
+    /// </summary>
+    private static string FormatTimeLabel(long timeMs, long intervalMs)
+    {
+        if (intervalMs < 1000)
+        {
+            // ms 단위: "0.0s", "0.5s" 등
+            return $"{timeMs / 1000.0:F1}s";
+        }
+        if (timeMs < 60000)
+        {
+            // 1분 미만: "0s", "5s", "30s"
+            return $"{timeMs / 1000}s";
+        }
+        // 1분 이상: "M:SS"
+        int minutes = (int)(timeMs / 60000);
+        int seconds = (int)((timeMs % 60000) / 1000);
+        if (timeMs >= 3600000)
+        {
+            // 1시간 이상: "H:MM:SS"
+            int hours = minutes / 60;
+            minutes %= 60;
+            return $"{hours}:{minutes:D2}:{seconds:D2}";
+        }
+        return $"{minutes}:{seconds:D2}";
     }
 
     private void DrawMarkers(DrawingContext context)
@@ -553,6 +612,13 @@ public class TimelineHeader : Control
         base.OnPointerPressed(e);
 
         if (_viewModel == null) return;
+
+        // 재생 중이면 즉시 중지 (타이머+클럭 정지)
+        if (_viewModel.IsPlaying)
+        {
+            _viewModel.IsPlaying = false;
+            _viewModel.RequestStopPlayback?.Invoke();
+        }
 
         var point = e.GetPosition(this);
         var clickedMarker = GetMarkerAtPosition(point, threshold: 20);
@@ -834,11 +900,13 @@ public class TimelineHeader : Control
 
     private double TimeToX(long timeMs)
     {
-        return timeMs * _pixelsPerMs - _scrollOffsetX;
+        // TrackHeaderWidth 오프셋: Header는 ColumnSpan=2라 x=0이 Grid 왼쪽 끝이지만,
+        // ClipCanvasPanel은 Column=1 (x=60)부터 시작하므로 60px 보정 필요
+        return timeMs * _pixelsPerMs - _scrollOffsetX + TrackHeaderWidth;
     }
 
     private long XToTime(double x)
     {
-        return (long)((x + _scrollOffsetX) / _pixelsPerMs);
+        return (long)((x - TrackHeaderWidth + _scrollOffsetX) / _pixelsPerMs);
     }
 }

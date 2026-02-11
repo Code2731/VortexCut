@@ -3,4 +3,4 @@
 
 pub mod decoder;
 
-pub use decoder::{Decoder, Frame, PixelFormat};
+pub use decoder::{Decoder, Frame, PixelFormat, DecoderState, DecodeResult};

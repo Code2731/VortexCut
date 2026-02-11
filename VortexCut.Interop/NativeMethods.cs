@@ -161,6 +161,21 @@ public static class NativeMethods
         out nuint outDataSize);
 
     /// <summary>
+    /// 프레임 캐시 클리어 (클립 편집 시 호출)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int renderer_clear_cache(IntPtr renderer);
+
+    /// <summary>
+    /// 캐시 통계 조회 (디버깅/모니터링)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int renderer_get_cache_stats(
+        IntPtr renderer,
+        out uint outCachedFrames,
+        out nuint outCacheBytes);
+
+    /// <summary>
     /// 렌더링된 프레임 데이터 해제
     /// </summary>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
@@ -168,10 +183,11 @@ public static class NativeMethods
 
     /// <summary>
     /// 비디오 썸네일 생성 (스탠드얼론 함수)
+    /// filePath는 UTF-8 인코딩된 IntPtr (Marshal.StringToCoTaskMemUTF8 사용)
     /// </summary>
-    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int generate_video_thumbnail(
-        [MarshalAs(UnmanagedType.LPStr)] string filePath,
+        IntPtr filePath,
         long timestampMs,
         uint thumbWidth,
         uint thumbHeight,

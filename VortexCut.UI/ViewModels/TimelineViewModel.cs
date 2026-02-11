@@ -85,6 +85,11 @@ public partial class TimelineViewModel : ViewModelBase
     public RippleEditService? RippleEditService { get; private set; }
     public LinkClipService? LinkClipService { get; private set; }
 
+    /// <summary>
+    /// 재생 중지 요청 콜백 (MainViewModel에서 설정)
+    /// </summary>
+    public Action? RequestStopPlayback { get; set; }
+
     public TimelineViewModel(ProjectService projectService)
     {
         _projectService = projectService;

@@ -78,6 +78,13 @@ public class TimelineCanvas : Grid
         _trackListPanel = new TrackListPanel();
         _clipCanvasPanel = new ClipCanvasPanel();
 
+        // 가상 스크롤 변경 시 TimelineHeader 동기화
+        _clipCanvasPanel.OnVirtualScrollChanged = (offsetX) =>
+        {
+            _scrollOffsetX = offsetX;
+            _timelineHeader.SetScrollOffset(offsetX);
+        };
+
         // ScrollViewer (수평/수직 스크롤)
         _scrollViewer = new ScrollViewer
         {

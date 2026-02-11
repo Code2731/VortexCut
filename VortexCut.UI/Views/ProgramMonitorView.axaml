@@ -39,9 +39,8 @@
                     <TextBlock FontFamily="Consolas, Courier New, monospace"
                               FontSize="12"
                               Foreground="{StaticResource AccentBrush}"
-                              VerticalAlignment="Center">
-                        <Run Text="{Binding Preview.CurrentTimeMs, StringFormat='{}{0:hh\\:mm\\:ss\\.fff}'}"/>
-                    </TextBlock>
+                              VerticalAlignment="Center"
+                              Text="{Binding Preview.CurrentTimeDisplay}"/>
                 </Border>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
                     <Button Classes="ToolButton" ToolTip.Tip="Previous Frame" Width="32" Height="28">
@@ -49,7 +48,10 @@
                     </Button>
                     <Button Classes="ToolButton" Width="40" Height="28" Command="{Binding PlayPauseCommand}" ToolTip.Tip="Play / Pause (Space)">
                         <Border Background="{StaticResource AccentBrush}" CornerRadius="3" Padding="8,4">
-                            <PathIcon Data="{StaticResource IconPlay}" Width="12" Height="12" Foreground="White"/>
+                            <Panel>
+                                <PathIcon Data="{StaticResource IconPlay}" Width="12" Height="12" Foreground="White" IsVisible="{Binding !Preview.IsPlaying}"/>
+                                <PathIcon Data="{StaticResource IconPause}" Width="12" Height="12" Foreground="White" IsVisible="{Binding Preview.IsPlaying}"/>
+                            </Panel>
                         </Border>
                     </Button>
                     <Button Classes="ToolButton" ToolTip.Tip="Next Frame" Width="32" Height="28">

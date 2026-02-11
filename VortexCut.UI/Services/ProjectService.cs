@@ -99,22 +99,11 @@ public class ProjectService : IDisposable
     }
 
     /// <summary>
-    /// 특정 시간의 프레임 렌더링
+    /// 특정 시간의 프레임 렌더링 (프레임 스킵 시 null 반환)
     /// </summary>
-    public RenderedFrame RenderFrame(long timestampMs)
+    public RenderedFrame? RenderFrame(long timestampMs)
     {
-        System.Diagnostics.Debug.WriteLine($"🎬 ProjectService.RenderFrame: timestampMs={timestampMs}");
-
-        // Timeline 상태 확인
-        var videoTrackCount = _timelineService.GetVideoTrackCount();
-        var clipCount = _timelineService.GetVideoClipCount(_defaultVideoTrackId);
-        var duration = _timelineService.GetDuration();
-        System.Diagnostics.Debug.WriteLine($"   Timeline state: videoTracks={videoTrackCount}, clipCount={clipCount}, duration={duration}ms");
-
         var frame = _renderService.RenderFrame(timestampMs);
-
-        System.Diagnostics.Debug.WriteLine($"   ✅ Frame returned: {frame.Width}x{frame.Height}, {frame.Data.Length} bytes");
-
         return frame;
     }
 

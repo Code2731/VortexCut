@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:VortexCut.UI.ViewModels"
+             xmlns:converters="clr-namespace:VortexCut.UI.Converters"
              mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="450"
              x:Class="VortexCut.UI.Views.ProjectBinView"
              x:DataType="vm:ProjectBinViewModel">
@@ -22,7 +23,7 @@
                             <Border Width="80" Height="45" Background="{StaticResource BgHeaderBrush}" CornerRadius="2" ClipToBounds="True">
                                 <Panel>
                                     <!-- 썸네일 이미지 (ThumbnailPath가 있으면 표시) -->
-                                    <Image Source="{Binding ThumbnailPath}"
+                                    <Image Source="{Binding ThumbnailPath, Converter={x:Static converters:FilePathToBitmapConverter.Instance}}"
                                            Stretch="UniformToFill"
                                            IsVisible="{Binding ThumbnailPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <!-- 플레이스홀더 (썸네일이 없으면 표시) -->

@@ -1,4 +1,5 @@
 // FFmpeg Decoder 모듈 (ffmpeg-next with hardware acceleration)
+// 아키텍처: 상태 머신 기반 디코더 + EOF/에러 안전 처리
 
 use ffmpeg_next as ffmpeg;
 use std::path::Path;
@@ -21,7 +22,27 @@ pub enum PixelFormat {
     YUV420P,
 }
 
-/// 비디오 디코더 (ffmpeg-next + hwaccel options)
+/// 디코더 상태 머신
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DecoderState {
+    Ready,          // 정상 동작 가능
+    EndOfStream,    // 파일 끝 도달 (seek으로 복구 가능)
+    Error,          // 복구 불가능한 에러
+}
+
+/// 디코딩 결과 (에러와 "프레임 없음"을 구분)
+pub enum DecodeResult {
+    /// 정상 프레임
+    Frame(Frame),
+    /// 프레임 스킵됨 (디코딩 실패했지만 계속 가능, 이전 프레임 유지)
+    FrameSkipped,
+    /// EOF 도달 + 마지막 성공 프레임 반환
+    EndOfStream(Frame),
+    /// EOF 도달 + 사용 가능한 프레임 없음
+    EndOfStreamEmpty,
+}
+
+/// 비디오 디코더 (ffmpeg-next, 상태 머신 기반)
 pub struct Decoder {
     input_ctx: ffmpeg::format::context::Input,
     video_stream_index: usize,
@@ -32,7 +53,10 @@ pub struct Decoder {
     fps: f64,
     duration_ms: i64,
     last_timestamp_ms: i64,
-    is_hardware: bool,  // Hardware acceleration 사용 여부
+    is_hardware: bool,
+    state: DecoderState,
+    /// 마지막 성공 디코딩 프레임 (EOF/에러 시 fallback용)
+    last_decoded_frame: Option<Frame>,
 }
 
 impl Decoder {
@@ -71,53 +95,10 @@ impl Decoder {
         // FFmpeg 초기화
         ffmpeg::init().map_err(|e| format!("FFmpeg init failed: {}", e))?;
 
-        // OPTIMIZATION: Hardware acceleration options (플랫폼별)
-        let mut options = ffmpeg::Dictionary::new();
-
-        // 플랫폼별 하드웨어 가속 설정
-        #[cfg(target_os = "windows")]
-        {
-            // Windows: NVIDIA CUDA (NVDEC) 우선, 실패 시 D3D11VA
-            options.set("hwaccel", "cuda");
-            options.set("hwaccel_output_format", "cuda");
-            println!("🚀 Opening input with hardware acceleration (Windows: CUDA/NVDEC)");
-        }
-
-        #[cfg(target_os = "macos")]
-        {
-            // macOS: VideoToolbox (Apple 하드웨어 가속)
-            options.set("hwaccel", "videotoolbox");
-            options.set("hwaccel_output_format", "videotoolbox");
-            println!("🚀 Opening input with hardware acceleration (macOS: VideoToolbox)");
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            // Linux: VAAPI (Intel) 우선, 실패 시 CUDA
-            options.set("hwaccel", "vaapi");
-            options.set("hwaccel_output_format", "vaapi");
-            println!("🚀 Opening input with hardware acceleration (Linux: VAAPI)");
-        }
-
-        // 입력 파일 열기 (with hardware acceleration options)
-        let input_ctx = ffmpeg::format::input_with_dictionary(&file_path, options)
-            .map_err(|e| {
-                println!("⚠️ Failed to open with hwaccel, trying without...");
-                e
-            });
-
-        // Fallback to normal input if hwaccel fails
-        let input_ctx = match input_ctx {
-            Ok(ctx) => {
-                println!("   ✅ Input opened with hardware acceleration");
-                ctx
-            }
-            Err(_) => {
-                println!("   📦 Opening input without hardware acceleration");
-                ffmpeg::format::input(&file_path)
-                    .map_err(|e| format!("Failed to open file: {}", e))?
-            }
-        };
+        // 소프트웨어 디코딩 (멀티스레드 Frame threading으로 충분한 성능)
+        // NOTE: hwaccel=cuda 옵션은 콘솔/테스트 환경에서 hang 유발하므로 제거
+        let input_ctx = ffmpeg::format::input(&file_path)
+            .map_err(|e| format!("Failed to open file: {}", e))?;
 
         // 비디오 스트림 찾기
         let video_stream = input_ctx
@@ -183,6 +164,8 @@ impl Decoder {
             duration_ms,
             last_timestamp_ms: -1,
             is_hardware,
+            state: DecoderState::Ready,
+            last_decoded_frame: None,
         })
     }
 
@@ -203,47 +186,152 @@ impl Decoder {
         self.duration_ms
     }
 
-    /// 특정 시간의 프레임 디코딩
-    pub fn decode_frame(&mut self, timestamp_ms: i64) -> Result<Frame, String> {
-        // CRITICAL: 연속 재생 최적화 - 순차적이면 seek 스킵
-        let frame_duration_ms = (1000.0 / self.fps) as i64;
-        let is_sequential = timestamp_ms >= self.last_timestamp_ms
+    pub fn state(&self) -> DecoderState {
+        self.state
+    }
+
+    /// 특정 시간의 프레임 디코딩 (상태 머신 기반)
+    /// - 순차 재생: seek 없이 다음 프레임 디코딩 (최적 경로)
+    /// - 랜덤 접근(스크럽): seek → 키프레임에서 목표 PTS까지 디코딩 전진
+    /// - EOF/에러: DecodeResult로 구분하여 재생 중단 없이 안전 처리
+    pub fn decode_frame(&mut self, timestamp_ms: i64) -> Result<DecodeResult, String> {
+        // Error 상태에서는 마지막 프레임 반환
+        if self.state == DecoderState::Error {
+            return match &self.last_decoded_frame {
+                Some(f) => Ok(DecodeResult::EndOfStream(f.clone())),
+                None => Ok(DecodeResult::EndOfStreamEmpty),
+            };
+        }
+
+        let frame_duration_ms = (1000.0 / self.fps).max(1.0) as i64;
+        let is_sequential = self.state == DecoderState::Ready
+            && timestamp_ms >= self.last_timestamp_ms
             && timestamp_ms <= self.last_timestamp_ms + frame_duration_ms * 2;
 
+        // EOF 상태에서 seek → Ready로 복구
         if !is_sequential {
-            // 순차적이지 않으면 seek 필요
-            println!("   🔍 Non-sequential access: {}ms -> {}ms, seeking...", self.last_timestamp_ms, timestamp_ms);
-            self.seek(timestamp_ms)?;
-        } else {
-            println!("   ⏩ Sequential access: {}ms -> {}ms, skip seek", self.last_timestamp_ms, timestamp_ms);
+            if let Err(e) = self.seek(timestamp_ms) {
+                eprintln!("Seek failed at {}ms: {}", timestamp_ms, e);
+                // seek 실패 시 마지막 프레임 반환 (재생 중단 방지)
+                return match &self.last_decoded_frame {
+                    Some(_) => Ok(DecodeResult::FrameSkipped),
+                    None => Ok(DecodeResult::EndOfStreamEmpty),
+                };
+            }
         }
 
         self.last_timestamp_ms = timestamp_ms;
 
-        // 패킷 읽고 디코딩
+        // Seek 후: 목표 PTS까지 디코딩 전진에 필요한 정보 계산
+        let target_info = if !is_sequential {
+            let stream = self.input_ctx.stream(self.video_stream_index)
+                .ok_or("Video stream not found")?;
+            let tb = stream.time_base();
+            let target_pts = (timestamp_ms * i64::from(tb.denominator()))
+                / (i64::from(tb.numerator()) * 1000);
+            let tolerance_pts = (frame_duration_ms * i64::from(tb.denominator()))
+                / (i64::from(tb.numerator()) * 1000);
+            Some((target_pts, tolerance_pts))
+        } else {
+            None // 순차 재생: PTS 확인 불필요, 다음 프레임 즉시 반환
+        };
+
         let mut decoded_frame: Option<ffmpeg::frame::Video> = None;
 
-        for (stream, packet) in self.input_ctx.packets() {
-            if stream.index() == self.video_stream_index {
-                self.decoder.send_packet(&packet)
-                    .map_err(|e| format!("Failed to send packet: {}", e))?;
-
-                let mut frame = ffmpeg::frame::Video::empty();
-                if self.decoder.receive_frame(&mut frame).is_ok() {
-                    decoded_frame = Some(frame);
-                    break;
-                }
+        // Step 1: 디코더 버퍼에서 프레임 확인
+        loop {
+            let mut frame = ffmpeg::frame::Video::empty();
+            if self.decoder.receive_frame(&mut frame).is_err() {
+                break;
+            }
+            if is_pts_at_target(target_info, &frame) {
+                decoded_frame = Some(frame);
+                break;
             }
         }
 
-        let frame = decoded_frame.ok_or("Failed to decode frame")?;
+        // Step 2: 패킷 읽으며 디코딩 (목표 PTS 도달까지)
+        let mut hit_eof = false;
+        if decoded_frame.is_none() {
+            let mut packet_count = 0;
+            let mut packets_exhausted = true; // for 루프가 끝까지 소진되면 EOF
+
+            for (stream, packet) in self.input_ctx.packets() {
+                if stream.index() != self.video_stream_index {
+                    continue;
+                }
+
+                // send_packet (EAGAIN 시 drain 후 재시도)
+                if self.decoder.send_packet(&packet).is_err() {
+                    loop {
+                        let mut frame = ffmpeg::frame::Video::empty();
+                        if self.decoder.receive_frame(&mut frame).is_err() { break; }
+                        if is_pts_at_target(target_info, &frame) {
+                            decoded_frame = Some(frame);
+                            break;
+                        }
+                    }
+                    if decoded_frame.is_some() { packets_exhausted = false; break; }
+                    let _ = self.decoder.send_packet(&packet);
+                }
+
+                // 디코딩된 프레임 수신 (B-frame 재정렬 대응)
+                loop {
+                    let mut frame = ffmpeg::frame::Video::empty();
+                    if self.decoder.receive_frame(&mut frame).is_err() { break; }
+                    if is_pts_at_target(target_info, &frame) {
+                        decoded_frame = Some(frame);
+                        break;
+                    }
+                }
+
+                if decoded_frame.is_some() { packets_exhausted = false; break; }
+
+                packet_count += 1;
+                if packet_count > 300 {
+                    // 안전장치: 300패킷 소진 → FrameSkipped (에러가 아님)
+                    packets_exhausted = false;
+                    break;
+                }
+            }
+
+            // for 루프가 자연종료 = 패킷 소진 = EOF
+            if packets_exhausted && decoded_frame.is_none() {
+                hit_eof = true;
+            }
+        }
+
+        // EOF 처리
+        if hit_eof {
+            self.state = DecoderState::EndOfStream;
+            return match &self.last_decoded_frame {
+                Some(f) => Ok(DecodeResult::EndOfStream(f.clone())),
+                None => Ok(DecodeResult::EndOfStreamEmpty),
+            };
+        }
+
+        // 프레임 디코딩 실패 (EOF가 아닌 경우) → FrameSkipped
+        let raw_frame = match decoded_frame {
+            Some(f) => f,
+            None => return Ok(DecodeResult::FrameSkipped),
+        };
 
         // RGBA 프레임으로 변환
+        let frame = self.convert_to_rgba(&raw_frame, timestamp_ms)?;
+
+        // 마지막 성공 프레임 저장 (EOF/에러 시 fallback)
+        self.last_decoded_frame = Some(frame.clone());
+        self.state = DecoderState::Ready;
+
+        Ok(DecodeResult::Frame(frame))
+    }
+
+    /// 디코딩된 ffmpeg Video 프레임을 RGBA Frame으로 변환
+    fn convert_to_rgba(&mut self, raw_frame: &ffmpeg::frame::Video, timestamp_ms: i64) -> Result<Frame, String> {
         let mut rgb_frame = ffmpeg::frame::Video::empty();
-        self.scaler.run(&frame, &mut rgb_frame)
+        self.scaler.run(raw_frame, &mut rgb_frame)
             .map_err(|e| format!("Failed to scale frame: {}", e))?;
 
-        // 프레임 데이터 복사
         let size = (self.width * self.height * 4) as usize;
         let mut data = vec![0u8; size];
 
@@ -343,7 +431,7 @@ impl Decoder {
         })
     }
 
-    /// 특정 시간으로 seek
+    /// 특정 시간으로 seek (EOF/Error 상태에서 자동 복구)
     pub fn seek(&mut self, timestamp_ms: i64) -> Result<(), String> {
         let stream = self.input_ctx.stream(self.video_stream_index)
             .ok_or("Video stream not found")?;
@@ -354,13 +442,44 @@ impl Decoder {
         let timestamp = (timestamp_ms * i64::from(time_base.denominator()))
             / (i64::from(time_base.numerator()) * 1000);
 
-        self.input_ctx
-            .seek(timestamp, ..timestamp)
-            .map_err(|e| format!("Seek failed: {}", e))?;
+        match self.input_ctx.seek(timestamp, ..timestamp) {
+            Ok(_) => {
+                self.decoder.flush();
+                // seek 성공 → Ready 상태로 복구 (EOF/Error에서 복구)
+                self.state = DecoderState::Ready;
+                Ok(())
+            }
+            Err(e) => {
+                // seek 실패 → flush 후 재시도 1회
+                self.decoder.flush();
+                match self.input_ctx.seek(timestamp, ..timestamp) {
+                    Ok(_) => {
+                        self.decoder.flush();
+                        self.state = DecoderState::Ready;
+                        Ok(())
+                    }
+                    Err(_) => {
+                        self.state = DecoderState::Error;
+                        Err(format!("Seek failed after retry: {}", e))
+                    }
+                }
+            }
+        }
+    }
+}
 
-        self.decoder.flush();
-
-        Ok(())
+/// PTS가 목표에 도달했는지 확인 (모듈 레벨 함수 - borrow checker 충돌 방지)
+/// target_info: None이면 순차 재생 → 항상 true (첫 프레임 즉시 수락)
+/// target_info: Some((target_pts, tolerance_pts)) → PTS >= target - tolerance 이면 true
+fn is_pts_at_target(target_info: Option<(i64, i64)>, frame: &ffmpeg::frame::Video) -> bool {
+    match target_info {
+        None => true, // 순차 재생: 다음 프레임 무조건 사용
+        Some((target_pts, tolerance_pts)) => {
+            match frame.pts() {
+                Some(pts) => pts >= target_pts - tolerance_pts,
+                None => true, // PTS 정보 없으면 수락
+            }
+        }
     }
 }
 

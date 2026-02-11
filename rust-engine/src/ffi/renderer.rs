@@ -66,45 +66,86 @@ pub extern "C" fn renderer_render_frame(
         return ErrorCode::NullPointer as i32;
     }
 
-    println!("🎬 renderer_render_frame: timestamp_ms={}, renderer=0x{:X}", timestamp_ms, renderer as usize);
-
     unsafe {
-        // CRITICAL: Mutex를 통해 Renderer에 접근 (thread-safe)
         let renderer_mutex = &*(renderer as *const Mutex<Renderer>);
 
-        println!("   🔒 Attempting to lock renderer (try_lock, non-blocking)...");
         let mut renderer_ref = match renderer_mutex.try_lock() {
-            Ok(r) => {
-                println!("   ✅ Renderer locked successfully");
-                r
-            }
+            Ok(r) => r,
             Err(_) => {
-                println!("   ⏭️ Renderer busy, frame SKIPPED at {}ms", timestamp_ms);
-                // 이미 렌더링 중이면 프레임 드랍 (에러 아님)
+                // Mutex busy → 프레임 스킵 (출력 파라미터 초기화)
+                *out_width = 0;
+                *out_height = 0;
+                *out_data = std::ptr::null_mut();
+                *out_data_size = 0;
                 return ErrorCode::Success as i32;
             }
         };
 
         match renderer_ref.render_frame(timestamp_ms) {
             Ok(frame) => {
-                println!("✅ renderer_render_frame: Frame rendered {}x{}, {} bytes", frame.width, frame.height, frame.data.len());
                 *out_width = frame.width;
                 *out_height = frame.height;
                 *out_data_size = frame.data.len();
 
-                // 데이터를 힙에 할당하고 포인터 반환
                 let data_box = frame.data.into_boxed_slice();
                 *out_data = Box::into_raw(data_box) as *mut u8;
 
-                println!("   🔓 Renderer will be unlocked (lock guard dropped)");
                 ErrorCode::Success as i32
             }
             Err(e) => {
-                println!("❌ renderer_render_frame: Render failed: {}", e);
+                eprintln!("❌ renderer_render_frame failed at {}ms: {}", timestamp_ms, e);
                 ErrorCode::RenderFailed as i32
             }
         }
         // Mutex lock은 여기서 자동으로 해제됨 (MutexGuard drop)
+    }
+}
+
+/// 프레임 캐시 클리어 (클립 편집 시 C#에서 호출)
+#[no_mangle]
+pub extern "C" fn renderer_clear_cache(renderer: *mut c_void) -> i32 {
+    if renderer.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let renderer_mutex = &*(renderer as *const Mutex<Renderer>);
+        match renderer_mutex.try_lock() {
+            Ok(mut r) => {
+                r.clear_cache();
+                ErrorCode::Success as i32
+            }
+            Err(_) => ErrorCode::Success as i32, // busy면 무시
+        }
+    }
+}
+
+/// 캐시 통계 조회 (디버깅/모니터링)
+#[no_mangle]
+pub extern "C" fn renderer_get_cache_stats(
+    renderer: *mut c_void,
+    out_cached_frames: *mut u32,
+    out_cache_bytes: *mut usize,
+) -> i32 {
+    if renderer.is_null() || out_cached_frames.is_null() || out_cache_bytes.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let renderer_mutex = &*(renderer as *const Mutex<Renderer>);
+        match renderer_mutex.try_lock() {
+            Ok(r) => {
+                let (frames, bytes) = r.cache_stats();
+                *out_cached_frames = frames;
+                *out_cache_bytes = bytes;
+                ErrorCode::Success as i32
+            }
+            Err(_) => {
+                *out_cached_frames = 0;
+                *out_cache_bytes = 0;
+                ErrorCode::Success as i32
+            }
+        }
     }
 }
 
