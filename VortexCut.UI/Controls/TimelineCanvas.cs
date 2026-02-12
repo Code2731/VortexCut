@@ -1,6 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using VortexCut.Core.Models;
 using VortexCut.UI.Controls.Timeline;
+using VortexCut.UI.Services;
 using VortexCut.UI.ViewModels;
 
 namespace VortexCut.UI.Controls;
@@ -15,6 +17,7 @@ public class TimelineCanvas : Grid
     private readonly TrackListPanel _trackListPanel;
     private readonly ClipCanvasPanel _clipCanvasPanel;
     private readonly ScrollViewer _scrollViewer;
+    private readonly ThumbnailStripService _thumbnailService;
 
     private TimelineViewModel? _viewModel;
     private double _pixelsPerMs = 0.1;
@@ -78,6 +81,16 @@ public class TimelineCanvas : Grid
         _trackListPanel = new TrackListPanel();
         _clipCanvasPanel = new ClipCanvasPanel();
 
+        // 썸네일 스트립 서비스 생성 + ClipCanvasPanel 주입
+        _thumbnailService = new ThumbnailStripService();
+        _thumbnailService.OnThumbnailReady = () =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                _clipCanvasPanel.InvalidateVisual,
+                Avalonia.Threading.DispatcherPriority.Render);
+        };
+        _clipCanvasPanel.SetThumbnailService(_thumbnailService);
+
         // 가상 스크롤 변경 시 TimelineHeader 동기화
         _clipCanvasPanel.OnVirtualScrollChanged = (offsetX) =>
         {
@@ -117,6 +130,12 @@ public class TimelineCanvas : Grid
 
         // 스크롤 이벤트 연결
         _scrollViewer.ScrollChanged += OnScrollChanged;
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _thumbnailService?.Dispose();
     }
 
     /// <summary>

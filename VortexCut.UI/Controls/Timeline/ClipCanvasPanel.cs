@@ -49,6 +49,9 @@ public class ClipCanvasPanel : Control
     private long _originalStartTimeMs;
     private long _originalDurationMs;
 
+    // 썸네일 스트립 서비스
+    private ThumbnailStripService? _thumbnailStripService;
+
     // 키프레임 드래그 상태
     private Keyframe? _draggingKeyframe;
     private KeyframeSystem? _draggingKeyframeSystem;
@@ -62,6 +65,15 @@ public class ClipCanvasPanel : Control
 
     // 애니메이션 (선택 펄스 효과)
     private double _selectionPulsePhase = 0;
+    private double _glowAccumulatorMs = 0;
+    private const double GlowIntervalMs = 100; // 10fps
+
+    // 스냅샷 변경 감지 (트랙 배경 최적화)
+    private double _lastRenderedPixelsPerMs = -1;
+    private double _lastRenderedScrollOffsetX = -1;
+    private int _lastRenderedVideoTrackCount = -1;
+    private int _lastRenderedAudioTrackCount = -1;
+    private bool _trackBackgroundDirty = true;
 
     // 재생 헤드 자동 스크롤
     private bool _followPlayhead = true;
@@ -131,6 +143,11 @@ public class ClipCanvasPanel : Control
         InvalidateVisual();
     }
 
+    public void SetThumbnailService(ThumbnailStripService service)
+    {
+        _thumbnailStripService = service;
+    }
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -158,10 +175,15 @@ public class ClipCanvasPanel : Control
                 _selectionPulsePhase -= Math.PI * 2;
             }
 
-            // 선택된 클립이 있으면 애니메이션 계속 (다음 프레임 요청)
-            if (_viewModel?.SelectedClips.Count > 0)
+            // 선택된 클립 글로우 애니메이션 (10fps 제한 - 유휴 CPU 절약)
+            if (_viewModel?.SelectedClips.Count > 0 && !(_viewModel?.IsPlaying ?? false))
             {
-                Dispatcher.UIThread.Post(InvalidateVisual, Avalonia.Threading.DispatcherPriority.Render);
+                _glowAccumulatorMs += deltaTime;
+                if (_glowAccumulatorMs >= GlowIntervalMs)
+                {
+                    _glowAccumulatorMs = 0;
+                    Dispatcher.UIThread.Post(InvalidateVisual, Avalonia.Threading.DispatcherPriority.Render);
+                }
             }
 
             // 재생 헤드 자동 스크롤 (Playhead Follow) - 드래그/트림 중에는 스킵
@@ -206,6 +228,18 @@ public class ClipCanvasPanel : Control
                 Dispatcher.UIThread.Post(InvalidateVisual, Avalonia.Threading.DispatcherPriority.Render);
             }
         }
+
+        // 스냅샷 변경 감지 (향후 캐싱 확장 기반)
+        bool zoomDirty = Math.Abs(_pixelsPerMs - _lastRenderedPixelsPerMs) > 0.0001;
+        bool scrollDirty = Math.Abs(_scrollOffsetX - _lastRenderedScrollOffsetX) > 0.5;
+        bool trackLayoutDirty = _videoTracks.Count != _lastRenderedVideoTrackCount
+                              || _audioTracks.Count != _lastRenderedAudioTrackCount;
+        _trackBackgroundDirty = zoomDirty || scrollDirty || trackLayoutDirty;
+
+        _lastRenderedPixelsPerMs = _pixelsPerMs;
+        _lastRenderedScrollOffsetX = _scrollOffsetX;
+        _lastRenderedVideoTrackCount = _videoTracks.Count;
+        _lastRenderedAudioTrackCount = _audioTracks.Count;
 
         // 배경
         context.FillRectangle(RenderResourceCache.BackgroundBrush, Bounds);
@@ -345,6 +379,16 @@ public class ClipCanvasPanel : Control
         long visibleStartMs = XToTime(-50);
         long visibleEndMs = XToTime(Bounds.Width + 50);
 
+        // 50개 이상 visible 클립 시 LOD 강제 하향 (성능)
+        int visibleClipCount = 0;
+        foreach (var clip in _clips)
+        {
+            long clipEnd = clip.StartTimeMs + clip.DurationMs;
+            if (clipEnd >= visibleStartMs && clip.StartTimeMs <= visibleEndMs)
+                visibleClipCount++;
+        }
+        bool forceLowLOD = visibleClipCount > 50;
+
         int renderedCount = 0;
         foreach (var clip in _clips)
         {
@@ -355,7 +399,7 @@ public class ClipCanvasPanel : Control
 
             bool isSelected = _viewModel?.SelectedClips.Contains(clip) ?? false;
             bool isHovered = clip == _hoveredClip;
-            DrawClip(context, clip, isSelected, isHovered);
+            DrawClip(context, clip, isSelected, isHovered, forceLowLOD);
             renderedCount++;
         }
 
@@ -375,7 +419,7 @@ public class ClipCanvasPanel : Control
         return ClipLOD.Minimal;                           // 단색 박스만
     }
 
-    private void DrawClip(DrawingContext context, ClipModel clip, bool isSelected, bool isHovered)
+    private void DrawClip(DrawingContext context, ClipModel clip, bool isSelected, bool isHovered, bool forceLowLOD = false)
     {
         double x = TimeToX(clip.StartTimeMs);
         double width = DurationToWidth(clip.DurationMs);
@@ -388,8 +432,9 @@ public class ClipCanvasPanel : Control
         double height = track.Height - 10;
         var clipRect = new Rect(x, y + 5, Math.Max(width, MinClipWidth), height);
 
-        // LOD 결정
+        // LOD 결정 (50개 초과 시 Full → Medium 강제 하향)
         var lod = GetClipLOD(clipRect.Width);
+        if (forceLowLOD && lod == ClipLOD.Full) lod = ClipLOD.Medium;
 
         // 드래그 중인 클립 감지
         bool isDragging = _isDragging && clip == _draggingClip;
@@ -475,6 +520,19 @@ public class ClipCanvasPanel : Control
         if (lod == ClipLOD.Medium)
         {
             context.FillRectangle(gradientBrush, clipRect);
+
+            // 비디오 클립 썸네일 (Medium LOD에서도 표시)
+            if (!isAudioClip && _thumbnailStripService != null)
+            {
+                var tier = ThumbnailStripService.GetTierForZoom(_pixelsPerMs);
+                var strip = _thumbnailStripService.GetOrRequestStrip(
+                    clip.FilePath, clip.DurationMs, tier);
+                if (strip?.Thumbnails.Count > 0)
+                {
+                    DrawThumbnailStrip(context, strip, clipRect, clip);
+                }
+            }
+
             var medBorderPen = isSelected
                 ? RenderResourceCache.ClipBorderMediumSelected
                 : RenderResourceCache.ClipBorderMediumNormal;
@@ -523,6 +581,19 @@ public class ClipCanvasPanel : Control
         }
 
         context.FillRectangle(gradientBrush, clipRect);
+
+        // 비디오 클립 + LOD Full/Medium일 때 썸네일 렌더링
+        if (!isAudioClip && _thumbnailStripService != null)
+        {
+            var tier = ThumbnailStripService.GetTierForZoom(_pixelsPerMs);
+            var strip = _thumbnailStripService.GetOrRequestStrip(
+                clip.FilePath, clip.DurationMs, tier);
+
+            if (strip?.Thumbnails.Count > 0)
+            {
+                DrawThumbnailStrip(context, strip, clipRect, clip);
+            }
+        }
 
         // 색상 라벨 (DaVinci Resolve 스타일 - 클립 상단에 얇은 바)
         if (clip.ColorLabelArgb != 0)
@@ -802,6 +873,58 @@ public class ClipCanvasPanel : Control
         context.DrawLine(RenderResourceCache.WaveformCenterPen,
             new Point(clipRect.Left, centerY),
             new Point(clipRect.Right, centerY));
+    }
+
+    /// <summary>
+    /// 클립 내부에 썸네일 스트립 렌더링
+    /// 클립 본체 gradient 위에 반투명 썸네일을 배치
+    /// </summary>
+    private void DrawThumbnailStrip(
+        DrawingContext context, ThumbnailStrip strip,
+        Rect clipRect, ClipModel clip)
+    {
+        // 썸네일 표시 영역 (클립 상하 5px 마진)
+        double thumbMargin = 5;
+        double thumbHeight = clipRect.Height - thumbMargin * 2;
+        if (thumbHeight <= 0) return;
+
+        double aspectRatio = 16.0 / 9.0;
+        double thumbWidth = thumbHeight * aspectRatio;
+
+        // 클립 영역으로 클리핑 (썸네일이 클립 밖으로 안 나가도록)
+        using (context.PushClip(clipRect))
+        {
+            foreach (var thumb in strip.Thumbnails)
+            {
+                // 클립 내 시간 위치 → 픽셀 위치
+                double thumbX = clipRect.X + (thumb.SourceTimeMs * _pixelsPerMs);
+
+                // 뷰포트 밖 스킵 (성능)
+                if (thumbX + thumbWidth < 0 || thumbX > Bounds.Width)
+                    continue;
+
+                var destRect = new Rect(
+                    thumbX,
+                    clipRect.Y + thumbMargin,
+                    thumbWidth,
+                    thumbHeight);
+
+                context.DrawImage(thumb.Bitmap, destRect);
+            }
+
+            // 썸네일 위에 반투명 오버레이 (클립 색상 유지)
+            byte overlayR = 58, overlayG = 123, overlayB = 242; // 비디오 기본색 #3A7BF2
+            if (clip.ColorLabelArgb != 0)
+            {
+                overlayR = (byte)((clip.ColorLabelArgb >> 16) & 0xFF);
+                overlayG = (byte)((clip.ColorLabelArgb >> 8) & 0xFF);
+                overlayB = (byte)(clip.ColorLabelArgb & 0xFF);
+            }
+
+            var overlayBrush = RenderResourceCache.GetSolidBrush(
+                Color.FromArgb(80, overlayR, overlayG, overlayB));
+            context.FillRectangle(overlayBrush, clipRect);
+        }
     }
 
     /// <summary>

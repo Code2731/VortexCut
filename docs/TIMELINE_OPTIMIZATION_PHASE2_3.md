@@ -2,8 +2,8 @@
 
 > **작성일**: 2026-02-11
 > **Phase 1 상태**: 완료 (RenderResourceCache.cs + ClipCanvasPanel 전체 브러시/펜 캐싱)
-> **Phase 2 대상**: 썸네일 스트립 시스템 (클립 내 비디오 프레임 시각화)
-> **Phase 3 대상**: Dirty 플래그 + 애니메이션 빈도 조절
+> **Phase 2 상태**: ✅ 완료 (ThumbnailStripService + 점진적 썸네일 렌더링)
+> **Phase 3 상태**: ✅ 완료 (글로우 10fps 제한 + 스냅샷 변경 감지 + LOD 자동 조절)
 
 ---
 
@@ -728,4 +728,4 @@ cd rust-engine && cargo test
 
 ---
 
-**마지막 업데이트**: 2026-02-11
+**마지막 업데이트**: 2026-02-12 (Phase 2 & 3 구현 완료)
