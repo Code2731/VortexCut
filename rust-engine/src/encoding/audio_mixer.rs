@@ -71,8 +71,8 @@ impl AudioMixer {
                 None => continue,
             };
 
-            // PCM 디코딩
-            let samples = match decoder.decode_range(source_start, duration_ms as i64) {
+            // PCM 디코딩 (duration_ms를 f64로 전달 — i64 truncation하면 매 프레임 샘플 부족 → 노이즈)
+            let samples = match decoder.decode_range(source_start, duration_ms) {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("[AUDIO_MIX] 디코딩 실패 {}: {}", file_path, e);

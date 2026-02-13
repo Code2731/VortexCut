@@ -65,6 +65,10 @@ pub struct Decoder {
     /// EOF가 발생한 timestamp (ms) — 이 이후 timestamp에 대해 seek+decode 반복 방지
     /// 역방향 seek 시 자동 초기화
     eof_timestamp_ms: Option<i64>,
+    /// Export용 YUV420P 직접 출력 모드 (RGBA 변환 건너뜀)
+    /// true: 디코더 → YUV420P → 인코더 (색공간 변환 없이 최고 품질)
+    /// false: 디코더 → RGBA → 프리뷰/썸네일/인코더
+    yuv_output: bool,
 }
 
 impl Decoder {
@@ -100,21 +104,30 @@ impl Decoder {
 
     /// 비디오 파일 열기 (프리뷰용 960x540 고정 해상도)
     pub fn open(file_path: &Path) -> Result<Self, String> {
-        Self::open_with_resolution(file_path, 960, 540)
+        Self::open_internal(file_path, 960, 540, false, false)
     }
 
     /// 비디오 파일 열기 (커스텀 출력 해상도 지정)
     /// 썸네일 세션에서는 직접 썸네일 크기로 디코딩하여 불필요한 다운스케일 방지
     pub fn open_with_resolution(file_path: &Path, target_width: u32, target_height: u32) -> Result<Self, String> {
-        // FFmpeg 초기화
+        Self::open_internal(file_path, target_width, target_height, false, false)
+    }
+
+    /// Export용 고품질 디코더 (YUV420P 직접 출력 + LANCZOS 리사이즈)
+    /// RGBA 변환을 건너뛰어 색공간 변환 손실 제거
+    pub fn open_for_export(file_path: &Path, target_width: u32, target_height: u32) -> Result<Self, String> {
+        Self::open_internal(file_path, target_width, target_height, true, true)
+    }
+
+    /// 내부 디코더 생성
+    /// - high_quality: LANCZOS(Export) vs FAST_BILINEAR(프리뷰)
+    /// - yuv_output: YUV420P 직접 출력(Export) vs RGBA(프리뷰)
+    fn open_internal(file_path: &Path, target_width: u32, target_height: u32, high_quality: bool, yuv_output: bool) -> Result<Self, String> {
         ffmpeg::init().map_err(|e| format!("FFmpeg init failed: {}", e))?;
 
-        // 소프트웨어 디코딩 (멀티스레드 Frame threading으로 충분한 성능)
-        // NOTE: hwaccel=cuda 옵션은 콘솔/테스트 환경에서 hang 유발하므로 제거
         let input_ctx = ffmpeg::format::input(&file_path)
             .map_err(|e| format!("Failed to open file: {}", e))?;
 
-        // 비디오 스트림 찾기
         let video_stream = input_ctx
             .streams()
             .best(ffmpeg::media::Type::Video)
@@ -126,40 +139,51 @@ impl Decoder {
 
         let (decoder, is_hardware) = Self::try_create_decoder(codec_id, codec_params)?;
 
-        // 비디오 정보 추출
         let src_width = decoder.width();
         let src_height = decoder.height();
 
         let decode_width = target_width;
         let decode_height = target_height;
 
-        // FPS 계산
         let fps = f64::from(video_stream.avg_frame_rate());
 
-        // Duration 계산 (ms)
         let duration_ms = if video_stream.duration() > 0 {
             let time_base = video_stream.time_base();
             (video_stream.duration() * i64::from(time_base.numerator()) * 1000)
                 / i64::from(time_base.denominator())
         } else if input_ctx.duration() > 0 {
-            input_ctx.duration() / 1000 // microseconds to milliseconds
+            input_ctx.duration() / 1000
         } else {
             0
         };
 
-        // Scaler 생성 (YUV -> RGBA 변환 + 해상도 축소)
+        // Export: LANCZOS (최고 품질), 프리뷰: FAST_BILINEAR (속도 우선)
+        let scaler_flags = if high_quality {
+            ffmpeg::software::scaling::Flags::LANCZOS
+        } else {
+            ffmpeg::software::scaling::Flags::FAST_BILINEAR
+        };
+
+        // YUV 직접 출력: 색공간 변환 없이 YUV420P로 리사이즈만
+        // RGBA 출력: 프리뷰/썸네일용 색공간 변환
+        let output_pixel_format = if yuv_output {
+            ffmpeg::format::Pixel::YUV420P
+        } else {
+            ffmpeg::format::Pixel::RGBA
+        };
+
         let scaler = ffmpeg::software::scaling::Context::get(
             decoder.format(),
             src_width,
             src_height,
-            ffmpeg::format::Pixel::RGBA,
+            output_pixel_format,
             decode_width,
             decode_height,
-            ffmpeg::software::scaling::Flags::FAST_BILINEAR,
+            scaler_flags,
         )
         .map_err(|e| format!("Failed to create scaler: {}", e))?;
 
-        let frame_duration_ms = (1000.0 / fps).max(1.0) as i64;
+        let _frame_duration_ms = (1000.0 / fps).max(1.0) as i64;
 
         Ok(Self {
             input_ctx,
@@ -174,8 +198,9 @@ impl Decoder {
             is_hardware,
             state: DecoderState::Ready,
             last_decoded_frame: None,
-            forward_threshold_ms: 100, // 기본 100ms (스크럽용). 재생 시 Renderer가 5000ms로 전환
+            forward_threshold_ms: 100,
             eof_timestamp_ms: None,
+            yuv_output,
         })
     }
 
@@ -361,8 +386,8 @@ impl Decoder {
             None => return Ok(DecodeResult::FrameSkipped),
         };
 
-        // RGBA 프레임으로 변환
-        let frame = self.convert_to_rgba(&raw_frame, timestamp_ms)?;
+        // 출력 프레임으로 변환 (RGBA 또는 YUV420P)
+        let frame = self.convert_frame(&raw_frame, timestamp_ms)?;
 
         // 마지막 성공 프레임 저장 (EOF/에러 시 fallback)
         self.last_decoded_frame = Some(frame.clone());
@@ -371,20 +396,31 @@ impl Decoder {
         Ok(DecodeResult::Frame(frame))
     }
 
-    /// 디코딩된 ffmpeg Video 프레임을 RGBA Frame으로 변환
+    /// 디코딩된 ffmpeg Video 프레임을 출력 형식으로 변환
+    /// - yuv_output=false: RGBA (프리뷰/썸네일용)
+    /// - yuv_output=true: YUV420P 직접 출력 (Export용 — 색공간 변환 손실 제거)
     /// bounds check 추가: FFmpeg이 손상된 프레임을 반환해도 panic 대신 Err 반환
-    fn convert_to_rgba(&mut self, raw_frame: &ffmpeg::frame::Video, timestamp_ms: i64) -> Result<Frame, String> {
-        let mut rgb_frame = ffmpeg::frame::Video::empty();
-        self.scaler.run(raw_frame, &mut rgb_frame)
+    fn convert_frame(&mut self, raw_frame: &ffmpeg::frame::Video, timestamp_ms: i64) -> Result<Frame, String> {
+        let mut scaled_frame = ffmpeg::frame::Video::empty();
+        self.scaler.run(raw_frame, &mut scaled_frame)
             .map_err(|e| format!("Failed to scale frame: {}", e))?;
 
+        if self.yuv_output {
+            self.extract_yuv_frame(&scaled_frame, timestamp_ms)
+        } else {
+            self.extract_rgba_frame(&scaled_frame, timestamp_ms)
+        }
+    }
+
+    /// RGBA 프레임 추출 (프리뷰/썸네일용)
+    fn extract_rgba_frame(&self, frame: &ffmpeg::frame::Video, timestamp_ms: i64) -> Result<Frame, String> {
         let size = (self.width * self.height * 4) as usize;
         let mut data = vec![0u8; size];
 
-        let src_data = rgb_frame.data(0);
-        let linesize = rgb_frame.stride(0);
+        let src_data = frame.data(0);
+        let linesize = frame.stride(0);
 
-        // 안전성 검증: src_data가 충분한 크기인지 확인
+        // 안전성 검증
         let required_src_size = (self.height as usize - 1) * linesize + (self.width as usize * 4);
         if src_data.len() < required_src_size {
             return Err(format!(
@@ -404,7 +440,6 @@ impl Decoder {
             let src_offset = y * linesize;
             let dst_offset = y * (self.width as usize * 4);
             let row_size = self.width as usize * 4;
-
             data[dst_offset..dst_offset + row_size]
                 .copy_from_slice(&src_data[src_offset..src_offset + row_size]);
         }
@@ -413,6 +448,63 @@ impl Decoder {
             width: self.width,
             height: self.height,
             format: PixelFormat::RGBA,
+            data,
+            timestamp_ms,
+        })
+    }
+
+    /// YUV420P 프레임 추출 (Export용 — 색공간 변환 없이 직접 전달)
+    /// 데이터 레이아웃: [Y plane: w*h][U plane: w/2*h/2][V plane: w/2*h/2]
+    fn extract_yuv_frame(&self, frame: &ffmpeg::frame::Video, timestamp_ms: i64) -> Result<Frame, String> {
+        let w = self.width as usize;
+        let h = self.height as usize;
+        let y_size = w * h;
+        let half_w = w / 2;
+        let half_h = h / 2;
+        let uv_size = half_w * half_h;
+        let total = y_size + uv_size * 2;
+        let mut data = vec![0u8; total];
+
+        // Y plane
+        let y_data = frame.data(0);
+        let y_stride = frame.stride(0);
+        for row in 0..h {
+            let src_offset = row * y_stride;
+            let dst_offset = row * w;
+            if src_offset + w <= y_data.len() {
+                data[dst_offset..dst_offset + w]
+                    .copy_from_slice(&y_data[src_offset..src_offset + w]);
+            }
+        }
+
+        // U plane
+        let u_data = frame.data(1);
+        let u_stride = frame.stride(1);
+        for row in 0..half_h {
+            let src_offset = row * u_stride;
+            let dst_offset = y_size + row * half_w;
+            if src_offset + half_w <= u_data.len() {
+                data[dst_offset..dst_offset + half_w]
+                    .copy_from_slice(&u_data[src_offset..src_offset + half_w]);
+            }
+        }
+
+        // V plane
+        let v_data = frame.data(2);
+        let v_stride = frame.stride(2);
+        for row in 0..half_h {
+            let src_offset = row * v_stride;
+            let dst_offset = y_size + uv_size + row * half_w;
+            if src_offset + half_w <= v_data.len() {
+                data[dst_offset..dst_offset + half_w]
+                    .copy_from_slice(&v_data[src_offset..src_offset + half_w]);
+            }
+        }
+
+        Ok(Frame {
+            width: self.width,
+            height: self.height,
+            format: PixelFormat::YUV420P,
             data,
             timestamp_ms,
         })

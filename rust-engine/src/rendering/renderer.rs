@@ -113,8 +113,11 @@ impl FrameCache {
 pub struct RenderedFrame {
     pub width: u32,
     pub height: u32,
-    pub data: Vec<u8>, // RGBA 포맷
+    pub data: Vec<u8>, // RGBA 또는 YUV420P
     pub timestamp_ms: i64,
+    /// Export 시 true: data는 YUV420P (색공간 변환 손실 없음)
+    /// 프리뷰 시 false: data는 RGBA
+    pub is_yuv: bool,
 }
 
 // ============================================================
@@ -155,6 +158,25 @@ fn black_frame_with_size(width: u32, height: u32, timestamp_ms: i64) -> Rendered
         height,
         data: vec![0u8; (width * height * 4) as usize],
         timestamp_ms,
+        is_yuv: false,
+    }
+}
+
+/// Export용 검은색 YUV420P 프레임 생성
+fn black_frame_yuv(width: u32, height: u32, timestamp_ms: i64) -> RenderedFrame {
+    let y_size = (width * height) as usize;
+    let uv_size = ((width / 2) * (height / 2)) as usize;
+    // YUV420P: Y=0 (검정), U=V=128 (무채색)
+    let mut data = vec![0u8; y_size + uv_size * 2];
+    for i in y_size..y_size + uv_size * 2 {
+        data[i] = 128;
+    }
+    RenderedFrame {
+        width,
+        height,
+        data,
+        timestamp_ms,
+        is_yuv: true,
     }
 }
 
@@ -255,7 +277,7 @@ impl Renderer {
             self.diag_no_clip += 1;
             self.print_diag_if_needed(timestamp_ms);
             return Ok(match self.export_resolution {
-                Some((w, h)) => black_frame_with_size(w, h, timestamp_ms),
+                Some((w, h)) => black_frame_yuv(w, h, timestamp_ms),
                 None => black_frame(timestamp_ms),
             });
         }
@@ -290,11 +312,13 @@ impl Renderer {
                 match decode_result {
                     DecodeResult::Frame(frame) => {
                         self.diag_decoded += 1;
+                        let is_yuv = frame.format == crate::ffmpeg::PixelFormat::YUV420P;
                         let rendered = RenderedFrame {
                             width: frame.width,
                             height: frame.height,
                             data: frame.data,
                             timestamp_ms,
+                            is_yuv,
                         };
                         // 캐시에 저장
                         self.frame_cache.put(file_path, *source_time_ms, rendered.clone());
@@ -306,17 +330,23 @@ impl Renderer {
                         self.diag_skipped += 1;
                         self.print_diag_if_needed(timestamp_ms);
                         // 프레임 스킵 → 마지막 렌더링 프레임 반환 (재생 중단 방지)
-                        Ok(self.last_rendered_frame.clone().unwrap_or_else(|| black_frame(timestamp_ms)))
+                        Ok(self.last_rendered_frame.clone().unwrap_or_else(|| {
+                            match self.export_resolution {
+                                Some((w, h)) => black_frame_yuv(w, h, timestamp_ms),
+                                None => black_frame(timestamp_ms),
+                            }
+                        }))
                     }
                     DecodeResult::EndOfStream(frame) => {
                         self.diag_eof += 1;
                         self.print_diag_if_needed(timestamp_ms);
-                        // EOF → 마지막 프레임 반환
+                        let is_yuv = frame.format == crate::ffmpeg::PixelFormat::YUV420P;
                         let rendered = RenderedFrame {
                             width: frame.width,
                             height: frame.height,
                             data: frame.data,
                             timestamp_ms,
+                            is_yuv,
                         };
                         self.last_rendered_frame = Some(rendered.clone());
                         Ok(rendered)
@@ -324,8 +354,12 @@ impl Renderer {
                     DecodeResult::EndOfStreamEmpty => {
                         self.diag_eof += 1;
                         self.print_diag_if_needed(timestamp_ms);
-                        // EOF + 프레임 없음 → 검은 화면
-                        Ok(self.last_rendered_frame.clone().unwrap_or_else(|| black_frame(timestamp_ms)))
+                        Ok(self.last_rendered_frame.clone().unwrap_or_else(|| {
+                            match self.export_resolution {
+                                Some((w, h)) => black_frame_yuv(w, h, timestamp_ms),
+                                None => black_frame(timestamp_ms),
+                            }
+                        }))
                     }
                 }
             }
@@ -334,7 +368,12 @@ impl Renderer {
                 self.print_diag_if_needed(timestamp_ms);
                 eprintln!("Decode error at {}ms: {}", timestamp_ms, e);
                 // 에러 시에도 마지막 프레임 반환 (재생 중단 방지)
-                Ok(self.last_rendered_frame.clone().unwrap_or_else(|| black_frame(timestamp_ms)))
+                Ok(self.last_rendered_frame.clone().unwrap_or_else(|| {
+                    match self.export_resolution {
+                        Some((w, h)) => black_frame_yuv(w, h, timestamp_ms),
+                        None => black_frame(timestamp_ms),
+                    }
+                }))
             }
         }
     }
@@ -372,9 +411,9 @@ impl Renderer {
         // 디코더가 캐시에 없으면 생성 (현재 모드의 forward_threshold 적용)
         let threshold = if self.playback_mode { 5000 } else { 100 };
         if !self.decoder_cache.contains_key(&file_path) {
-            // Export 모드: 지정 해상도로 디코딩, 프리뷰: 960x540
+            // Export: LANCZOS 고품질, 프리뷰: FAST_BILINEAR
             let mut decoder = match self.export_resolution {
-                Some((w, h)) => Decoder::open_with_resolution(&clip.file_path, w, h)?,
+                Some((w, h)) => Decoder::open_for_export(&clip.file_path, w, h)?,
                 None => Decoder::open(&clip.file_path)?,
             };
             decoder.set_forward_threshold(threshold);
@@ -387,12 +426,11 @@ impl Renderer {
         match decoder.decode_frame(source_time_ms) {
             Ok(result) => Ok(result),
             Err(e) => {
-                // 디코딩 에러 → 디코더 drop 후 재생성하여 1회 재시도
                 eprintln!("[DECODER] Decode error at {}ms: {}, recreating decoder", source_time_ms, e);
                 self.decoder_cache.remove(&file_path);
 
                 let mut new_decoder = match self.export_resolution {
-                    Some((w, h)) => Decoder::open_with_resolution(&clip.file_path, w, h)
+                    Some((w, h)) => Decoder::open_for_export(&clip.file_path, w, h)
                         .map_err(|e2| format!("Decoder recreate failed: {}", e2))?,
                     None => Decoder::open(&clip.file_path)
                         .map_err(|e2| format!("Decoder recreate failed: {}", e2))?,
@@ -437,14 +475,14 @@ mod tests {
         // 3개 프레임 추가
         for i in 0..3 {
             cache.put("test.mp4".to_string(), i * 33, RenderedFrame {
-                width: 960, height: 540, data: vec![0u8; 100], timestamp_ms: i * 33,
+                width: 960, height: 540, data: vec![0u8; 100], is_yuv: false, timestamp_ms: i * 33,
             });
         }
         assert_eq!(cache.entries.len(), 3);
 
         // 4번째 추가 → LRU eviction (가장 오래된 0ms 제거)
         cache.put("test.mp4".to_string(), 99, RenderedFrame {
-            width: 960, height: 540, data: vec![0u8; 100], timestamp_ms: 99,
+            width: 960, height: 540, data: vec![0u8; 100], is_yuv: false, timestamp_ms: 99,
         });
         assert_eq!(cache.entries.len(), 3);
         // 0ms는 evict됨
@@ -460,7 +498,7 @@ mod tests {
         let mut cache = FrameCache::new(10, 100 * 1024 * 1024);
 
         cache.put("test.mp4".to_string(), 0, RenderedFrame {
-            width: 960, height: 540, data: vec![0u8; 100], timestamp_ms: 0,
+            width: 960, height: 540, data: vec![0u8; 100], is_yuv: false, timestamp_ms: 0,
         });
 
         // 히트

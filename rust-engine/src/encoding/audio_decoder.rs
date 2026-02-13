@@ -151,9 +151,14 @@ impl AudioDecoder {
     /// - 이전 청크에서 초과 디코딩된 샘플을 먼저 소비
     /// - 현재 청크에서 초과된 샘플을 다음 청크로 이월
     /// - 이 없으면 매 청크 경계에서 ~5-20ms 갭 → 연속 크래클링 발생
-    pub fn decode_range(&mut self, start_ms: i64, duration_ms: i64) -> Result<Vec<f32>, String> {
-        let num_samples = ((duration_ms as f64 / 1000.0) * self.sample_rate as f64) as usize
+    ///
+    /// duration_ms는 f64로 받아야 함 (30fps → 33.33ms):
+    /// i64 truncation(33ms)하면 매 프레임 ~32 샘플 부족 → 30Hz 주기 클릭 노이즈
+    pub fn decode_range(&mut self, start_ms: i64, duration_ms: f64) -> Result<Vec<f32>, String> {
+        let num_samples = ((duration_ms / 1000.0) * self.sample_rate as f64) as usize
             * self.channels as usize;
+
+        let duration_ms_i64 = duration_ms.ceil() as i64;
 
         // seek이 필요한 경우 (순차 접근이 아닌 경우)
         let did_seek = if start_ms < self.current_pos_ms
@@ -187,7 +192,7 @@ impl AudioDecoder {
                 self.leftover_samples = result[num_samples..].to_vec();
                 result.truncate(num_samples);
             }
-            self.current_pos_ms = start_ms + duration_ms;
+            self.current_pos_ms = start_ms + duration_ms_i64;
             return Ok(result);
         }
 
@@ -259,7 +264,7 @@ impl AudioDecoder {
             result.resize(num_samples, 0.0);
         }
 
-        self.current_pos_ms = start_ms + duration_ms;
+        self.current_pos_ms = start_ms + duration_ms_i64;
         Ok(result)
     }
 
