@@ -149,6 +149,32 @@ impl Timeline {
             .flat_map(|track| track.get_clips_at_time(time_ms))
             .collect()
     }
+
+    /// 특정 시간에 오디오를 제공할 수 있는 모든 소스 (오디오 트랙 + 비디오 트랙)
+    /// 비디오 파일에도 오디오 스트림이 있으므로, 비디오 클립도 AudioClip으로 변환하여 반환
+    pub fn get_all_audio_sources_at_time(&self, time_ms: i64) -> Vec<AudioClip> {
+        let mut sources = Vec::new();
+
+        // 오디오 트랙의 클립
+        for clip in self.get_audio_clips_at_time(time_ms) {
+            sources.push(clip.clone());
+        }
+
+        // 비디오 트랙의 클립 → AudioClip으로 변환 (비디오 파일의 오디오 스트림 추출)
+        for (_, video_clip) in self.get_video_clips_at_time(time_ms) {
+            sources.push(AudioClip {
+                id: video_clip.id,
+                file_path: video_clip.file_path.clone(),
+                start_time_ms: video_clip.start_time_ms,
+                duration_ms: video_clip.duration_ms,
+                trim_start_ms: video_clip.trim_start_ms,
+                trim_end_ms: video_clip.trim_end_ms,
+                volume: 1.0,
+            });
+        }
+
+        sources
+    }
 }
 
 #[cfg(test)]

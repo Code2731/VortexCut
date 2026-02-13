@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+
 namespace VortexCut.Core.Models;
 
 /// <summary>
@@ -40,58 +43,51 @@ public enum WaveformDisplayMode
 /// </summary>
 public class TrackModel
 {
-    /// <summary>
-    /// 트랙 고유 ID (Rust Timeline의 트랙 ID와 매핑)
-    /// </summary>
+    [Category("기본 정보")]
+    [DisplayName("트랙 ID")]
+    [ReadOnly(true)]
     public ulong Id { get; set; }
 
-    /// <summary>
-    /// 트랙 인덱스 (0부터 시작, 표시 순서)
-    /// </summary>
+    [Category("기본 정보")]
+    [DisplayName("인덱스")]
+    [ReadOnly(true)]
     public int Index { get; set; }
 
-    /// <summary>
-    /// 트랙 타입 (비디오/오디오)
-    /// </summary>
+    [Category("기본 정보")]
+    [DisplayName("타입")]
+    [ReadOnly(true)]
     public TrackType Type { get; set; }
 
-    /// <summary>
-    /// 트랙 이름 (사용자가 편집 가능)
-    /// </summary>
+    [Category("트랙")]
+    [DisplayName("트랙 이름")]
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>
-    /// 트랙 활성화 상태
-    /// </summary>
+    [Category("상태")]
+    [DisplayName("활성화")]
     public bool IsEnabled { get; set; } = true;
 
-    /// <summary>
-    /// 뮤트 상태 (오디오 비활성화)
-    /// </summary>
+    [Category("상태")]
+    [DisplayName("뮤트")]
     public bool IsMuted { get; set; }
 
-    /// <summary>
-    /// 솔로 상태 (이 트랙만 재생, 다른 트랙 뮤트)
-    /// </summary>
+    [Category("상태")]
+    [DisplayName("솔로")]
     public bool IsSolo { get; set; }
 
-    /// <summary>
-    /// 잠금 상태 (편집 불가)
-    /// </summary>
+    [Category("상태")]
+    [DisplayName("잠금")]
     public bool IsLocked { get; set; }
 
-    /// <summary>
-    /// 트랙 색상 라벨 (ARGB 형식: 0xAARRGGBB)
-    /// </summary>
+    [Category("표시")]
+    [DisplayName("색상 (ARGB)")]
     public uint ColorArgb { get; set; } = 0xFF808080; // Gray
 
-    /// <summary>
-    /// 트랙 높이 (픽셀 단위, 30~200px)
-    /// </summary>
+    [Category("표시")]
+    [DisplayName("트랙 높이")]
+    [Range(30, 200)]
     public double Height { get; set; } = 60;
 
-    /// <summary>
-    /// 클립 표시 모드 (Filmstrip/Thumbnail/Minimal)
-    /// </summary>
+    [Category("표시")]
+    [DisplayName("표시 모드")]
     public ClipDisplayMode DisplayMode { get; set; } = ClipDisplayMode.Filmstrip;
 }

@@ -13,6 +13,7 @@ namespace VortexCut.UI.ViewModels;
 public partial class PreviewViewModel : ViewModelBase, IDisposable
 {
     private readonly ProjectService _projectService;
+    private readonly AudioPlaybackService _audioPlayback = new();
     private readonly System.Timers.Timer _playbackTimer;
 
     [ObservableProperty]
@@ -88,6 +89,10 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     {
         // 재생 중이면 스크럽 렌더 무시 (PlaybackRenderAsync가 처리)
         if (IsPlaying) return;
+
+        // 스크럽 시 오디오 정지 (다음 재생 시 새 위치에서 시작)
+        if (_audioPlayback.IsActive)
+            _audioPlayback.Stop();
 
         // 최신 요청 timestamp 기록 (이전 요청 덮어쓰기)
         Interlocked.Exchange(ref _pendingScrubTimeMs, timestampMs);
@@ -271,6 +276,7 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
         {
             _playbackTimer.Stop();
             _playbackClock.Stop();
+            _audioPlayback.Stop(); // 오디오 정지 (매번 새로 시작하여 동기화 보장)
             _projectService.SetPlaybackMode(false); // 스크럽 모드로 전환
             IsPlaying = false;
             Services.DebugLogger.Log("[PLAY] Stopped");
@@ -312,6 +318,10 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
             _playbackStartTimeMs = CurrentTimeMs;
             Interlocked.Exchange(ref _playbackRenderActive, 0); // 렌더 슬롯 초기화
             _projectService.SetPlaybackMode(true); // 재생 모드로 전환 (forward_threshold=5000ms)
+
+            // 오디오 재생 시작 (항상 현재 위치에서 새로 시작 → 비디오와 동기화 보장)
+            _audioPlayback.Start(_projectService.TimelineRawHandle, _playbackStartTimeMs);
+
             _playbackClock.Restart();
             _playbackTimer.Start();
             IsPlaying = true;
@@ -345,6 +355,7 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
             {
                 _playbackTimer.Stop();
                 _playbackClock.Stop();
+                _audioPlayback.Stop(); // 오디오 정지
                 _projectService.SetPlaybackMode(false); // 스크럽 모드로 복귀
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
@@ -382,6 +393,7 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     public void Reset()
     {
         _playbackTimer.Stop();
+        _audioPlayback.Stop(); // 오디오 정지
         IsPlaying = false;
         CurrentTimeMs = 0;
         _bitmapA = null;
@@ -394,6 +406,7 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _audioPlayback.Dispose(); // 오디오 정리
         _playbackTimer?.Dispose();
         GC.SuppressFinalize(this);
     }

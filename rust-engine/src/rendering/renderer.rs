@@ -131,6 +131,8 @@ pub struct Renderer {
     /// 재생 모드: true일 때 forward_threshold를 5초로 올려 seek 대신 forward decode
     /// false(스크럽)일 때는 기본값(66ms) 유지 → 즉시 seek으로 정확한 위치 도달
     playback_mode: bool,
+    /// Export용 출력 해상도 (None이면 프리뷰 960x540)
+    export_resolution: Option<(u32, u32)>,
     /// 진단 카운터 (매 30프레임마다 출력)
     diag_total: u64,
     diag_cache_hit: u64,
@@ -141,10 +143,13 @@ pub struct Renderer {
     diag_error: u64,
 }
 
-/// 검은색 프레임 생성 (960x540)
+/// 검은색 프레임 생성 (기본 960x540, Export 시 지정 해상도)
 fn black_frame(timestamp_ms: i64) -> RenderedFrame {
-    let width = 960u32;
-    let height = 540u32;
+    black_frame_with_size(960, 540, timestamp_ms)
+}
+
+/// 지정 크기의 검은색 프레임 생성
+fn black_frame_with_size(width: u32, height: u32, timestamp_ms: i64) -> RenderedFrame {
     RenderedFrame {
         width,
         height,
@@ -154,7 +159,7 @@ fn black_frame(timestamp_ms: i64) -> RenderedFrame {
 }
 
 impl Renderer {
-    /// 새 렌더러 생성
+    /// 새 렌더러 생성 (프리뷰용)
     pub fn new(timeline: Arc<Mutex<Timeline>>) -> Self {
         Self {
             timeline,
@@ -163,6 +168,30 @@ impl Renderer {
             frame_cache: FrameCache::new(60, 200 * 1024 * 1024),
             last_rendered_frame: None,
             playback_mode: false,
+            export_resolution: None,
+            diag_total: 0,
+            diag_cache_hit: 0,
+            diag_decoded: 0,
+            diag_eof: 0,
+            diag_skipped: 0,
+            diag_no_clip: 0,
+            diag_error: 0,
+        }
+    }
+
+    /// Export 전용 렌더러 생성
+    /// - 프리뷰 Renderer와 완전히 격리 (Mutex 경합 없음)
+    /// - 캐시 최소화 (순차 인코딩이므로 5프레임만)
+    /// - 지정 해상도로 디코딩
+    pub fn new_for_export(timeline: Arc<Mutex<Timeline>>, width: u32, height: u32) -> Self {
+        Self {
+            timeline,
+            decoder_cache: HashMap::new(),
+            // Export: 캐시 최소 (순차 인코딩이라 재사용 거의 없음)
+            frame_cache: FrameCache::new(5, 50 * 1024 * 1024),
+            last_rendered_frame: None,
+            playback_mode: true, // forward decode 모드 (순차 접근)
+            export_resolution: Some((width, height)),
             diag_total: 0,
             diag_cache_hit: 0,
             diag_decoded: 0,
@@ -225,7 +254,10 @@ impl Renderer {
         if clips_to_render.is_empty() {
             self.diag_no_clip += 1;
             self.print_diag_if_needed(timestamp_ms);
-            return Ok(black_frame(timestamp_ms));
+            return Ok(match self.export_resolution {
+                Some((w, h)) => black_frame_with_size(w, h, timestamp_ms),
+                None => black_frame(timestamp_ms),
+            });
         }
 
         // 첫 번째 클립 렌더링
@@ -340,7 +372,11 @@ impl Renderer {
         // 디코더가 캐시에 없으면 생성 (현재 모드의 forward_threshold 적용)
         let threshold = if self.playback_mode { 5000 } else { 100 };
         if !self.decoder_cache.contains_key(&file_path) {
-            let mut decoder = Decoder::open(&clip.file_path)?;
+            // Export 모드: 지정 해상도로 디코딩, 프리뷰: 960x540
+            let mut decoder = match self.export_resolution {
+                Some((w, h)) => Decoder::open_with_resolution(&clip.file_path, w, h)?,
+                None => Decoder::open(&clip.file_path)?,
+            };
             decoder.set_forward_threshold(threshold);
             self.decoder_cache.insert(file_path.clone(), decoder);
         }
@@ -355,8 +391,12 @@ impl Renderer {
                 eprintln!("[DECODER] Decode error at {}ms: {}, recreating decoder", source_time_ms, e);
                 self.decoder_cache.remove(&file_path);
 
-                let mut new_decoder = Decoder::open(&clip.file_path)
-                    .map_err(|e2| format!("Decoder recreate failed: {}", e2))?;
+                let mut new_decoder = match self.export_resolution {
+                    Some((w, h)) => Decoder::open_with_resolution(&clip.file_path, w, h)
+                        .map_err(|e2| format!("Decoder recreate failed: {}", e2))?,
+                    None => Decoder::open(&clip.file_path)
+                        .map_err(|e2| format!("Decoder recreate failed: {}", e2))?,
+                };
                 new_decoder.set_forward_threshold(threshold);
                 self.decoder_cache.insert(file_path.clone(), new_decoder);
 

@@ -2,8 +2,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:VortexCut.UI.ViewModels"
+             xmlns:apc="using:Avalonia.PropertyGrid.Controls"
              mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="600"
-             x:Class="VortexCut.UI.Views.InspectorView">
+             x:Class="VortexCut.UI.Views.InspectorView"
+             x:DataType="vm:MainViewModel">
 
     <Grid RowDefinitions="Auto, *">
         <Border Classes="PanelHeader">
@@ -11,36 +14,23 @@
         </Border>
 
         <TabControl Grid.Row="1" Background="{StaticResource BgPanelBrush}">
-            <!-- Properties Tab -->
+            <!-- Properties Tab — PropertyGrid 사용 -->
             <TabItem Header="Properties">
-                <ScrollViewer>
-                    <StackPanel Margin="12" Spacing="12">
-                        <TextBlock Text="Transform" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Position" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <Grid ColumnDefinitions="*, 8, *">
-                                <TextBox Text="0" Watermark="X"/>
-                                <TextBox Grid.Column="2" Text="0" Watermark="Y"/>
-                            </Grid>
-                        </StackPanel>
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Scale" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBox Text="100%" Watermark="Scale"/>
-                        </StackPanel>
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Rotation" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBox Text="0°" Watermark="Rotation"/>
-                        </StackPanel>
+                <Panel>
+                    <!-- 클립 선택 시 PropertyGrid 표시 -->
+                    <Panel IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <apc:PropertyGrid DataContext="{Binding Timeline.SelectedClip}"/>
+                    </Panel>
 
-                        <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,8"/>
-
-                        <TextBlock Text="Effect Stack" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-                        <ListBox Background="Transparent" BorderThickness="0">
-                            <ListBoxItem Content="Color Correction"/>
-                            <ListBoxItem Content="Transform"/>
-                        </ListBox>
-                    </StackPanel>
-                </ScrollViewer>
+                    <!-- 선택 없을 때 안내 -->
+                    <TextBlock
+                        IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNull}}"
+                        Text="클립을 선택하세요"
+                        Foreground="{StaticResource TextSecondaryBrush}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontSize="13"/>
+                </Panel>
             </TabItem>
 
             <!-- Audio Mixer Tab -->

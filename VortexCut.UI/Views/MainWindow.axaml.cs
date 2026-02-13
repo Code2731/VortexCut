@@ -40,6 +40,9 @@ public partial class MainWindow : Window
                 System.Diagnostics.Debug.WriteLine("❌ ToastContainer NOT found!");
             }
 
+            // Export 다이얼로그 열기 콜백
+            _viewModel.RequestOpenExportDialog = OpenExportDialog;
+
             _viewModel.Initialize(); // 첫 프로젝트 생성
         };
     }
@@ -367,6 +370,32 @@ public partial class MainWindow : Window
         {
             _viewModel.Timeline.SelectedClips.Add(clip);
         }
+    }
+
+    /// <summary>
+    /// Export 다이얼로그 열기
+    /// </summary>
+    private async void OpenExportDialog()
+    {
+        if (_viewModel == null) return;
+
+        var exportVm = new ExportViewModel(_viewModel.ProjectService);
+
+        var dialog = new ExportDialog
+        {
+            DataContext = exportVm
+        };
+
+        // Export 완료 시 다이얼로그 닫기
+        exportVm.OnExportComplete = () =>
+        {
+            _toastService.ShowSuccess("Export 완료", "영상이 성공적으로 저장되었습니다.");
+        };
+
+        await dialog.ShowDialog(this);
+
+        // 다이얼로그 닫힌 후 리소스 정리
+        exportVm.Dispose();
     }
 
     /// <summary>

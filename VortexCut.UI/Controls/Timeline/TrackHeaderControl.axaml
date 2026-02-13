@@ -68,7 +68,7 @@
 
         <!-- 색상 팔레트 팝업 -->
         <Popup Grid.Column="0" Name="ColorPopup"
-               PlacementMode="Right"
+               Placement="Right"
                IsLightDismissEnabled="True">
             <Border Background="#2A2A2C" BorderBrush="#555" BorderThickness="1"
                     CornerRadius="4" Padding="4">

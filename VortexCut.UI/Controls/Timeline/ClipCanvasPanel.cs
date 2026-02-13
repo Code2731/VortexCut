@@ -2385,7 +2385,9 @@ public class ClipCanvasPanel : Control
 
     private void HandleDragOver(object? sender, DragEventArgs e)
     {
+#pragma warning disable CS0618 // DragEventArgs.Data deprecated in Avalonia 11.3
         if (e.Data.Contains("MediaItem"))
+#pragma warning restore CS0618
         {
             e.DragEffects = DragDropEffects.Copy;
             e.Handled = true;
@@ -2398,9 +2400,11 @@ public class ClipCanvasPanel : Control
 
     private void HandleDrop(object? sender, DragEventArgs e)
     {
+#pragma warning disable CS0618 // DragEventArgs.Data deprecated in Avalonia 11.3
         if (e.Data.Contains("MediaItem") && _viewModel != null)
         {
             var mediaItem = e.Data.Get("MediaItem") as MediaItem;
+#pragma warning restore CS0618
             if (mediaItem != null)
             {
                 var dropPoint = e.GetPosition(this);

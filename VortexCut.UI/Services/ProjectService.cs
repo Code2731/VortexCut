@@ -18,6 +18,11 @@ public class ProjectService : IDisposable
 
     public Project? CurrentProject => _currentProject;
 
+    /// <summary>
+    /// Rust Timeline의 원시 포인터 (Export용)
+    /// </summary>
+    public IntPtr TimelineRawHandle => _timelineHandle?.DangerousGetHandle() ?? IntPtr.Zero;
+
     public ProjectService()
     {
         _timelineService = new TimelineService();

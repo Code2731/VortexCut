@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:VortexCut.UI.ViewModels"
+             xmlns:mi="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
              x:Class="VortexCut.UI.Views.ProgramMonitorView"
              x:DataType="vm:MainViewModel">
@@ -44,26 +45,26 @@
                 </Border>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
                     <Button Classes="ToolButton" ToolTip.Tip="Previous Frame" Width="32" Height="28">
-                        <PathIcon Data="{StaticResource IconPrevFrame}" Width="14" Height="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <mi:MaterialIcon Kind="SkipPrevious" Width="14" Height="14" Foreground="{StaticResource TextPrimaryBrush}"/>
                     </Button>
                     <Button Classes="ToolButton" Width="40" Height="28" Command="{Binding PlayPauseCommand}" ToolTip.Tip="Play / Pause (Space)">
                         <Border Background="{StaticResource AccentBrush}" CornerRadius="3" Padding="8,4">
                             <Panel>
-                                <PathIcon Data="{StaticResource IconPlay}" Width="12" Height="12" Foreground="White" IsVisible="{Binding !Preview.IsPlaying}"/>
-                                <PathIcon Data="{StaticResource IconPause}" Width="12" Height="12" Foreground="White" IsVisible="{Binding Preview.IsPlaying}"/>
+                                <mi:MaterialIcon Kind="Play" Width="12" Height="12" Foreground="White" IsVisible="{Binding !Preview.IsPlaying}"/>
+                                <mi:MaterialIcon Kind="Pause" Width="12" Height="12" Foreground="White" IsVisible="{Binding Preview.IsPlaying}"/>
                             </Panel>
                         </Border>
                     </Button>
                     <Button Classes="ToolButton" ToolTip.Tip="Next Frame" Width="32" Height="28">
-                        <PathIcon Data="{StaticResource IconNextFrame}" Width="14" Height="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <mi:MaterialIcon Kind="SkipNext" Width="14" Height="14" Foreground="{StaticResource TextPrimaryBrush}"/>
                     </Button>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
                     <Button Classes="ToolButton" ToolTip.Tip="Settings" Width="32" Height="28">
-                        <PathIcon Data="{StaticResource IconGear}" Width="14" Height="14" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <mi:MaterialIcon Kind="Cog" Width="14" Height="14" Foreground="{StaticResource TextSecondaryBrush}"/>
                     </Button>
                     <Button Classes="ToolButton" ToolTip.Tip="Fullscreen" Width="32" Height="28">
-                        <PathIcon Data="{StaticResource IconFullscreen}" Width="14" Height="14" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <mi:MaterialIcon Kind="Fullscreen" Width="14" Height="14" Foreground="{StaticResource TextSecondaryBrush}"/>
                     </Button>
                 </StackPanel>
             </Grid>

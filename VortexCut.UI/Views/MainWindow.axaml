@@ -6,6 +6,7 @@
         xmlns:views="clr-namespace:VortexCut.UI.Views"
         xmlns:controls="clr-namespace:VortexCut.UI.Controls"
         xmlns:timeline="clr-namespace:VortexCut.UI.Controls.Timeline"
+        xmlns:mi="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
         mc:Ignorable="d" d:DesignWidth="1600" d:DesignHeight="900"
         x:Class="VortexCut.UI.Views.MainWindow"
         x:DataType="vm:MainViewModel"
@@ -17,6 +18,7 @@
 
     <Window.KeyBindings>
         <KeyBinding Gesture="Space" Command="{Binding PlayPauseCommand}"/>
+        <KeyBinding Gesture="Ctrl+M" Command="{Binding ExportCommand}"/>
     </Window.KeyBindings>
 
     <Grid RowDefinitions="Auto, *, Auto">
@@ -38,7 +40,7 @@
                         <MenuItem Header="Save Project" Command="{Binding SaveProjectCommand}" InputGesture="Ctrl+S"/>
                         <MenuItem Header="Save Project As..." Command="{Binding SaveProjectAsCommand}" InputGesture="Ctrl+Shift+S"/>
                         <Separator/>
-                        <MenuItem Header="Export..." InputGesture="Ctrl+M"/>
+                        <MenuItem Header="Export..." Command="{Binding ExportCommand}" InputGesture="Ctrl+M"/>
                         <Separator/>
                         <MenuItem Header="Exit" InputGesture="Alt+F4"/>
                     </MenuItem>
@@ -82,7 +84,7 @@
 
             <!-- Status / Project Info -->
             <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" Margin="12,0">
-                <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <mi:MaterialIcon Kind="Folder" Width="14" Height="14" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                 <TextBlock Text="{Binding ProjectName}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold"/>
             </StackPanel>
         </Grid>
@@ -128,7 +130,7 @@
                 <GridSplitter Grid.Column="5" ResizeDirection="Columns" Background="{StaticResource BgBaseBrush}"/>
 
                 <!-- 4. Inspector -->
-                <views:InspectorView Grid.Column="6"/>
+                <views:InspectorView Grid.Column="6" DataContext="{Binding}"/>
             </Grid>
 
             <GridSplitter Grid.Row="1" ResizeDirection="Rows" Background="{StaticResource BgBaseBrush}"/>
@@ -161,7 +163,7 @@
                 <!-- Right: Render Queue -->
                 <Button Grid.Column="2" Classes="ToolButton" Padding="8,4" ToolTip.Tip="Render Queue">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <PathIcon Data="{StaticResource IconFilm}" Width="12" Height="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                        <mi:MaterialIcon Kind="Filmstrip" Width="12" Height="12" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                         <TextBlock Text="Render Queue" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>

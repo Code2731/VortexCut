@@ -24,6 +24,16 @@ public partial class MainViewModel : ViewModelBase
     private bool _isInitialized = false;
     private int _projectCounter = 0;
 
+    /// <summary>
+    /// Export 다이얼로그 열기 요청 (MainWindow에서 핸들링)
+    /// </summary>
+    public Action? RequestOpenExportDialog { get; set; }
+
+    /// <summary>
+    /// ProjectService 접근 (Export에서 사용)
+    /// </summary>
+    public ProjectService ProjectService => _projectService;
+
     [ObservableProperty]
     private ProjectBinViewModel _projectBin;
 
@@ -246,6 +256,20 @@ public partial class MainViewModel : ViewModelBase
             System.Diagnostics.Debug.WriteLine($"PlayPause ERROR: {ex.Message}");
             _toastService?.ShowError("재생 오류", "비디오를 재생할 수 없습니다. 파일을 확인해주세요.");
         }
+    }
+
+    [RelayCommand]
+    private void Export()
+    {
+        // 클립이 없으면 Export 불가
+        if (Timeline.Clips.Count == 0)
+        {
+            _toastService?.ShowError("Export 불가", "타임라인에 클립이 없습니다.");
+            return;
+        }
+
+        // MainWindow에서 다이얼로그 열기
+        RequestOpenExportDialog?.Invoke();
     }
 
     /// <summary>

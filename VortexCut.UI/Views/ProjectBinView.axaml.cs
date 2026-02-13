@@ -43,10 +43,11 @@ public partial class ProjectBinView : UserControl
                 if (listBox?.SelectedItem is MediaItem mediaItem)
                 {
                     _isDragging = true;
+#pragma warning disable CS0618 // DataObject/DoDragDrop deprecated in 11.3
                     var dragData = new DataObject();
                     dragData.Set("MediaItem", mediaItem);
-
                     DragDrop.DoDragDrop(e, dragData, DragDropEffects.Copy);
+#pragma warning restore CS0618
                     _isDragging = false;
                 }
             }

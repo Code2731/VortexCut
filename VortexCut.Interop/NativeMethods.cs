@@ -260,4 +260,91 @@ public static class NativeMethods
     /// </summary>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int free_audio_peaks(IntPtr peaks, uint count);
+
+    // ==================== Audio Playback Functions ====================
+
+    /// <summary>
+    /// 오디오 재생 시작
+    /// timeline: Rust Timeline의 Arc 포인터 (소유권 변경 없음)
+    /// startTimeMs: 재생 시작 위치
+    /// outHandle: AudioPlayback 핸들 반환
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int audio_playback_start(
+        IntPtr timeline,
+        long startTimeMs,
+        out IntPtr outHandle);
+
+    /// <summary>
+    /// 오디오 재생 정지
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int audio_playback_stop(IntPtr handle);
+
+    /// <summary>
+    /// 오디오 일시정지
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int audio_playback_pause(IntPtr handle);
+
+    /// <summary>
+    /// 오디오 재개
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int audio_playback_resume(IntPtr handle);
+
+    /// <summary>
+    /// 오디오 재생 객체 파괴 (메모리 해제)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int audio_playback_destroy(IntPtr handle);
+
+    // ==================== Export Functions ====================
+
+    /// <summary>
+    /// Export 시작 (백그라운드 스레드에서 실행)
+    /// timeline: Rust Timeline의 Arc 포인터
+    /// outputPath: UTF-8 인코딩된 출력 경로
+    /// outJob: ExportJob 핸들 반환
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int exporter_start(
+        IntPtr timeline,
+        IntPtr outputPath,
+        uint width,
+        uint height,
+        double fps,
+        uint crf,
+        out IntPtr outJob);
+
+    /// <summary>
+    /// Export 진행률 (0~100)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint exporter_get_progress(IntPtr job);
+
+    /// <summary>
+    /// Export 완료 여부 (1=완료, 0=진행중)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int exporter_is_finished(IntPtr job);
+
+    /// <summary>
+    /// Export 에러 메시지 (없으면 null)
+    /// 반환된 문자열은 string_free()로 해제 필요
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int exporter_get_error(IntPtr job, out IntPtr outError);
+
+    /// <summary>
+    /// Export 취소
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int exporter_cancel(IntPtr job);
+
+    /// <summary>
+    /// ExportJob 파괴 (메모리 해제)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int exporter_destroy(IntPtr job);
 }

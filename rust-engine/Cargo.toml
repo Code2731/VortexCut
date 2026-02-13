@@ -13,6 +13,8 @@ ffmpeg-next = "8.0"
 libc = "0.2"
 log = "0.4"
 env_logger = "0.11"
+# 실시간 오디오 출력 (WASAPI on Windows)
+cpal = "0.15"
 
 [build-dependencies]
 # C 헤더 생성은 선택사항

@@ -5,8 +5,10 @@ pub mod ffi;
 pub mod ffmpeg;
 pub mod timeline;
 pub mod rendering;
+pub mod encoding;
 pub mod subtitle;
 pub mod utils;
+pub mod audio;
 
 // FFI 함수들을 최상위에서 재export
 pub use ffi::*;

@@ -1,0 +1,107 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:VortexCut.UI.ViewModels"
+        x:Class="VortexCut.UI.Views.ExportDialog"
+        x:DataType="vm:ExportViewModel"
+        Title="Export"
+        Width="480" Height="420"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E2E">
+
+    <Window.Styles>
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="#CDD6F4"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="#313244"/>
+            <Setter Property="Foreground" Value="#CDD6F4"/>
+            <Setter Property="BorderBrush" Value="#45475A"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="#313244"/>
+            <Setter Property="Foreground" Value="#CDD6F4"/>
+            <Setter Property="BorderBrush" Value="#45475A"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="Background" Value="#45475A"/>
+            <Setter Property="Foreground" Value="#CDD6F4"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="16,6"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+
+        <!-- 제목 -->
+        <TextBlock Grid.Row="0" Text="Export 설정" FontSize="18" FontWeight="Bold" Margin="0,0,0,16"/>
+
+        <!-- 프리셋 -->
+        <Grid Grid.Row="1" ColumnDefinitions="100,*" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Text="프리셋:" VerticalAlignment="Center"/>
+            <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedPresetIndex}"
+                      HorizontalAlignment="Stretch">
+                <ComboBoxItem Content="1080p 고품질 (CRF 18)"/>
+                <ComboBoxItem Content="1080p 표준 (CRF 23)"/>
+                <ComboBoxItem Content="720p 빠른 (CRF 28)"/>
+                <ComboBoxItem Content="4K UHD (CRF 20)"/>
+            </ComboBox>
+        </Grid>
+
+        <!-- 해상도 -->
+        <Grid Grid.Row="2" ColumnDefinitions="100,*,Auto,*" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Text="해상도:" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="1" Text="{Binding Width}" IsReadOnly="{Binding IsExporting}"/>
+            <TextBlock Grid.Column="2" Text=" x " VerticalAlignment="Center"/>
+            <TextBox Grid.Column="3" Text="{Binding Height}" IsReadOnly="{Binding IsExporting}"/>
+        </Grid>
+
+        <!-- FPS + CRF -->
+        <Grid Grid.Row="3" ColumnDefinitions="100,*,20,60,*" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Text="FPS:" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="1" Text="{Binding Fps}" IsReadOnly="{Binding IsExporting}"/>
+            <TextBlock Grid.Column="3" Text="CRF:" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="4" Text="{Binding Crf}" IsReadOnly="{Binding IsExporting}"/>
+        </Grid>
+
+        <!-- 출력 경로 -->
+        <Grid Grid.Row="4" ColumnDefinitions="100,*,Auto" Margin="0,0,0,12">
+            <TextBlock Grid.Column="0" Text="출력 경로:" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="1" Text="{Binding OutputPath}" IsReadOnly="{Binding IsExporting}"
+                     Watermark="파일 경로를 선택하세요..."/>
+            <Button Grid.Column="2" Content="찾아보기" Click="OnBrowseClick" Margin="8,0,0,0"
+                    IsEnabled="{Binding !IsExporting}"/>
+        </Grid>
+
+        <!-- 진행률 바 -->
+        <StackPanel Grid.Row="5" Margin="0,0,0,8">
+            <ProgressBar Value="{Binding Progress}" Minimum="0" Maximum="100"
+                         Height="20" Foreground="#89B4FA" Background="#313244"
+                         CornerRadius="4"/>
+        </StackPanel>
+
+        <!-- 상태 텍스트 -->
+        <TextBlock Grid.Row="6" Text="{Binding StatusText}" Margin="0,0,0,8"
+                   FontSize="12" Foreground="#A6ADC8"/>
+
+        <!-- 에러 메시지 -->
+        <TextBlock Grid.Row="7" Text="{Binding ErrorMessage}" Foreground="#F38BA8"
+                   FontSize="12" TextWrapping="Wrap"
+                   IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+        <!-- 버튼 -->
+        <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Export 시작" Command="{Binding StartExportCommand}"
+                    IsVisible="{Binding !IsExporting}"
+                    Background="#89B4FA" Foreground="#1E1E2E" FontWeight="Bold"/>
+            <Button Content="취소" Command="{Binding CancelExportCommand}"
+                    IsVisible="{Binding IsExporting}"
+                    Background="#F38BA8" Foreground="#1E1E2E"/>
+            <Button Content="닫기" Click="OnCloseClick"/>
+        </StackPanel>
+    </Grid>
+</Window>

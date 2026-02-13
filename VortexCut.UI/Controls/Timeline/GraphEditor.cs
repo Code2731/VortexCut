@@ -128,7 +128,8 @@ public class GraphEditor : Control
         {
             Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
             GradientOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-            Radius = 0.8,
+            RadiusX = RelativeScalar.Parse("80%"),
+            RadiusY = RelativeScalar.Parse("80%"),
             GradientStops = new GradientStops
             {
                 new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.3),

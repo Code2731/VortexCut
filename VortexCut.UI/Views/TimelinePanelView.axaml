@@ -5,6 +5,7 @@
              xmlns:vm="clr-namespace:VortexCut.UI.ViewModels"
              xmlns:controls="clr-namespace:VortexCut.UI.Controls"
              xmlns:timeline="clr-namespace:VortexCut.UI.Controls.Timeline"
+             xmlns:mi="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="300"
              x:Class="VortexCut.UI.Views.TimelinePanelView"
              x:DataType="vm:MainViewModel">
@@ -19,14 +20,14 @@
                     <Border Background="{StaticResource BgDarkBrush}" CornerRadius="3" Padding="4,2">
                         <StackPanel Orientation="Horizontal" Spacing="2">
                             <Button Classes="ToolButton" ToolTip.Tip="Razor Tool (C)" Padding="6,3">
-                                <PathIcon Data="{StaticResource IconRazor}" Width="14" Height="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <mi:MaterialIcon Kind="ContentCut" Width="14" Height="14" Foreground="{StaticResource TextPrimaryBrush}"/>
                             </Button>
                             <Button Classes="ToolButton" ToolTip.Tip="Snap (S)" Padding="6,3">
-                                <PathIcon Data="{StaticResource IconSnap}" Width="14" Height="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <mi:MaterialIcon Kind="Magnet" Width="14" Height="14" Foreground="{StaticResource TextPrimaryBrush}"/>
                             </Button>
                             <Border Width="1" Background="{StaticResource BorderBrush}" Margin="4,0"/>
                             <Button Classes="ToolButton" ToolTip.Tip="Add Marker (M)" Padding="6,3">
-                                <PathIcon Data="{StaticResource IconPlus}" Width="12" Height="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <mi:MaterialIcon Kind="Plus" Width="12" Height="12" Foreground="{StaticResource TextPrimaryBrush}"/>
                             </Button>
                         </StackPanel>
                     </Border>
@@ -34,7 +35,7 @@
                     <!-- Zoom Level Indicator -->
                     <Border Background="{StaticResource BgDarkBrush}" CornerRadius="3" Padding="8,3">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <PathIcon Data="{StaticResource IconSearch}" Width="12" Height="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            <mi:MaterialIcon Kind="Magnify" Width="12" Height="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                             <TextBlock Text="100%" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
