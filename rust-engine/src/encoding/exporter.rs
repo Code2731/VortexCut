@@ -2,7 +2,7 @@
 // ExportJob: 타임라인 → MP4 파일 내보내기 전체 흐름
 // 비디오 (H.264) + 오디오 (AAC) 동시 인코딩
 
-use crate::encoding::encoder::VideoEncoder;
+use crate::encoding::encoder::{VideoEncoder, EncoderType};
 use crate::encoding::audio_mixer::AudioMixer;
 use crate::rendering::Renderer;
 use crate::subtitle::overlay::{SubtitleOverlayList, blend_overlay_rgba, yuv420p_to_rgba, rgba_to_yuv420p};
@@ -18,6 +18,7 @@ pub struct ExportConfig {
     pub height: u32,
     pub fps: f64,
     pub crf: u32,
+    pub encoder_type: u32,  // 0=Auto, 1=Software, 2=NVENC, 3=QSV, 4=AMF
 }
 
 /// Export 작업 핸들 (C#에서 폴링으로 상태 확인)
@@ -169,13 +170,15 @@ impl ExportJob {
         // 3. 비ASCII 경로 처리
         let (encoder_path, needs_move) = Self::safe_encoder_path(&config.output_path);
 
-        // 4. VideoEncoder 생성
+        // 4. VideoEncoder 생성 (인코더 타입 전달)
+        let enc_type = EncoderType::from_u32(config.encoder_type);
         let (mut encoder, encoder_path, needs_move) = match VideoEncoder::new(
             &encoder_path,
             config.width,
             config.height,
             config.fps,
             config.crf,
+            enc_type,
         ) {
             Ok(enc) => (enc, encoder_path, needs_move),
             Err(e) if needs_move => {
@@ -186,6 +189,7 @@ impl ExportJob {
                     config.height,
                     config.fps,
                     config.crf,
+                    enc_type,
                 ).map_err(|e2| format!("인코더 생성 실패: {} (재시도: {})", e, e2))?;
                 (enc, config.output_path.clone(), false)
             }

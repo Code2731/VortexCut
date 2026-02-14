@@ -45,6 +45,7 @@ pub extern "C" fn exporter_start(
             height,
             fps,
             crf,
+            encoder_type: 0, // Auto
         };
 
         // ExportJob 시작 (백그라운드 스레드)
@@ -235,6 +236,7 @@ pub extern "C" fn exporter_start_v2(
             height,
             fps,
             crf,
+            encoder_type: 0, // Auto
         };
 
         // 자막 목록 소유권 이전 (null이면 None)
@@ -250,6 +252,66 @@ pub extern "C" fn exporter_start_v2(
     }
 
     ErrorCode::Success as i32
+}
+
+/// 자막 포함 Export 시작 (v3) — 인코더 타입 선택 지원
+/// encoder_type: 0=Auto, 1=Software, 2=NVENC, 3=QSV, 4=AMF
+/// subtitle_list: null이면 자막 없음, 소유권 Rust로 이전
+#[no_mangle]
+pub extern "C" fn exporter_start_v3(
+    timeline: *mut c_void,
+    output_path: *const c_char,
+    width: u32,
+    height: u32,
+    fps: f64,
+    crf: u32,
+    encoder_type: u32,
+    subtitle_list: *mut c_void,
+    out_job: *mut *mut c_void,
+) -> i32 {
+    if timeline.is_null() || output_path.is_null() || out_job.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let c_str = CStr::from_ptr(output_path);
+        let output_path_str = match c_str.to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => return ErrorCode::InvalidParam as i32,
+        };
+
+        let timeline_arc = Arc::from_raw(timeline as *const Mutex<Timeline>);
+        let timeline_clone = Arc::clone(&timeline_arc);
+        let _ = Arc::into_raw(timeline_arc);
+
+        let config = ExportConfig {
+            output_path: output_path_str,
+            width,
+            height,
+            fps,
+            crf,
+            encoder_type,
+        };
+
+        let subtitles = if subtitle_list.is_null() {
+            None
+        } else {
+            Some(*Box::from_raw(subtitle_list as *mut SubtitleOverlayList))
+        };
+
+        let job = ExportJob::start_with_subtitles(timeline_clone, config, subtitles);
+        let job_box = Box::new(job);
+        *out_job = Box::into_raw(job_box) as *mut c_void;
+    }
+
+    ErrorCode::Success as i32
+}
+
+/// 사용 가능한 인코더 탐지 (비트마스크 반환)
+/// bit 0 = libx264 (1), bit 1 = NVENC (2), bit 2 = QSV (4), bit 3 = AMF (8)
+#[no_mangle]
+pub extern "C" fn exporter_detect_encoders() -> u32 {
+    crate::encoding::encoder::detect_available_encoders()
 }
 
 /// 자막 오버레이 목록 해제 (Export에 전달하지 않고 취소할 때만 사용)

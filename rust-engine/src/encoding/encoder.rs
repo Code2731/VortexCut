@@ -2,11 +2,49 @@
 // RGBA 프레임 → YUV420P → H.264 인코딩
 // f32 PCM → FLTP → AAC 인코딩
 // → MP4 먹싱
+// GPU 하드웨어 가속: NVENC / QSV / AMF 지원
 
 use ffmpeg_next as ffmpeg;
 use ffmpeg::format::Pixel;
 use ffmpeg::codec;
 use ffmpeg::software::scaling;
+
+/// 인코더 타입 (FFI u32 매핑)
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EncoderType {
+    Auto = 0,       // NVENC → QSV → AMF → libx264 순서 시도
+    Software = 1,   // libx264
+    Nvenc = 2,      // h264_nvenc (NVIDIA)
+    Qsv = 3,        // h264_qsv (Intel)
+    Amf = 4,        // h264_amf (AMD)
+}
+
+impl EncoderType {
+    pub fn from_u32(v: u32) -> Self {
+        match v {
+            1 => EncoderType::Software,
+            2 => EncoderType::Nvenc,
+            3 => EncoderType::Qsv,
+            4 => EncoderType::Amf,
+            _ => EncoderType::Auto,
+        }
+    }
+}
+
+/// 사용 가능한 인코더 탐지 (비트마스크 반환)
+/// bit 0 = libx264, bit 1 = NVENC, bit 2 = QSV, bit 3 = AMF
+pub fn detect_available_encoders() -> u32 {
+    ffmpeg::init().ok();
+    let mut mask = 0u32;
+    if ffmpeg::encoder::find_by_name("libx264").is_some() { mask |= 1; }
+    if ffmpeg::encoder::find_by_name("h264_nvenc").is_some() { mask |= 2; }
+    if ffmpeg::encoder::find_by_name("h264_qsv").is_some() { mask |= 4; }
+    if ffmpeg::encoder::find_by_name("h264_amf").is_some() { mask |= 8; }
+    eprintln!("[ENCODER] 탐지된 인코더: mask=0b{:04b} (x264={}, nvenc={}, qsv={}, amf={})",
+        mask, mask & 1 != 0, mask & 2 != 0, mask & 4 != 0, mask & 8 != 0);
+    mask
+}
 
 /// 비디오+오디오 인코더 (H.264 + AAC + MP4 컨테이너)
 pub struct VideoEncoder {
@@ -36,6 +74,7 @@ impl VideoEncoder {
         height: u32,
         fps: f64,
         crf: u32,
+        encoder_type: EncoderType,
     ) -> Result<Self, String> {
         ffmpeg::init().map_err(|e| format!("FFmpeg init failed: {}", e))?;
 
@@ -43,13 +82,13 @@ impl VideoEncoder {
         let mut output_ctx = ffmpeg::format::output(output_path)
             .map_err(|e| format!("Failed to create output: {}", e))?;
 
-        // H.264 인코더 찾기: libx264 우선 → 일반 H264 fallback
-        let (codec, is_libx264) = Self::find_h264_encoder()?;
+        // H.264 인코더 찾기 (타입별 분기 + 자동 폴백)
+        let (codec, codec_name) = Self::find_h264_encoder(encoder_type)?;
 
         eprintln!(
-            "[ENCODER] 사용 인코더: {} (libx264={})",
-            codec.name(),
-            is_libx264
+            "[ENCODER] 사용 인코더: {} (요청={:?})",
+            codec_name,
+            encoder_type
         );
 
         // 글로벌 헤더 플래그 사전 확인 (borrow 충돌 방지)
@@ -79,15 +118,35 @@ impl VideoEncoder {
         encoder.set_time_base(time_base);
         encoder.set_frame_rate(Some(ffmpeg::Rational::new(fps_num, fps_den)));
 
-        // 인코더 옵션 설정 (libx264 vs 기타)
+        // 인코더별 옵션 설정
         let mut opts = ffmpeg::Dictionary::new();
-        if is_libx264 {
-            opts.set("crf", &crf.to_string());
-            opts.set("preset", "medium");
-        } else {
-            let bitrate = Self::crf_to_bitrate(crf, width, height);
-            encoder.set_bit_rate(bitrate);
-            eprintln!("[ENCODER] CRF {} → bitrate {}kbps", crf, bitrate / 1000);
+        match codec_name.as_str() {
+            "libx264" => {
+                opts.set("crf", &crf.to_string());
+                opts.set("preset", "medium");
+            }
+            "h264_nvenc" => {
+                // NVENC: VBR + CQ (Constant Quality) 모드
+                opts.set("rc", "vbr");
+                opts.set("cq", &crf.to_string());
+                opts.set("preset", "p4"); // medium 상당
+                eprintln!("[ENCODER] NVENC CQ={}", crf);
+            }
+            "h264_qsv" => {
+                opts.set("global_quality", &crf.to_string());
+                opts.set("preset", "medium");
+                eprintln!("[ENCODER] QSV global_quality={}", crf);
+            }
+            "h264_amf" => {
+                let bitrate = Self::crf_to_bitrate(crf, width, height);
+                encoder.set_bit_rate(bitrate);
+                eprintln!("[ENCODER] AMF bitrate={}kbps", bitrate / 1000);
+            }
+            _ => {
+                let bitrate = Self::crf_to_bitrate(crf, width, height);
+                encoder.set_bit_rate(bitrate);
+                eprintln!("[ENCODER] {} bitrate={}kbps", codec_name, bitrate / 1000);
+            }
         }
 
         // 글로벌 헤더 플래그 (MP4 컨테이너 호환)
@@ -205,15 +264,55 @@ impl VideoEncoder {
         Ok(())
     }
 
-    /// H.264 인코더 찾기 (libx264 우선)
-    fn find_h264_encoder() -> Result<(ffmpeg::Codec, bool), String> {
-        if let Some(codec) = ffmpeg::encoder::find_by_name("libx264") {
-            return Ok((codec, true));
+    /// H.264 인코더 찾기 (EncoderType에 따라 분기 + 자동 폴백)
+    /// 반환: (Codec, codec_name)
+    fn find_h264_encoder(encoder_type: EncoderType) -> Result<(ffmpeg::Codec, String), String> {
+        match encoder_type {
+            EncoderType::Auto => {
+                // GPU 우선: NVENC → QSV → AMF → libx264 → generic
+                let try_order = ["h264_nvenc", "h264_qsv", "h264_amf", "libx264"];
+                for name in &try_order {
+                    if let Some(codec) = ffmpeg::encoder::find_by_name(name) {
+                        return Ok((codec, name.to_string()));
+                    }
+                }
+                // 최후의 폴백: generic H264
+                if let Some(codec) = ffmpeg::encoder::find(codec::Id::H264) {
+                    return Ok((codec, codec.name().to_string()));
+                }
+                Err("H.264 인코더를 찾을 수 없습니다".to_string())
+            }
+            EncoderType::Software => {
+                if let Some(codec) = ffmpeg::encoder::find_by_name("libx264") {
+                    return Ok((codec, "libx264".to_string()));
+                }
+                if let Some(codec) = ffmpeg::encoder::find(codec::Id::H264) {
+                    return Ok((codec, codec.name().to_string()));
+                }
+                Err("libx264 인코더를 찾을 수 없습니다".to_string())
+            }
+            EncoderType::Nvenc => {
+                if let Some(codec) = ffmpeg::encoder::find_by_name("h264_nvenc") {
+                    return Ok((codec, "h264_nvenc".to_string()));
+                }
+                eprintln!("[ENCODER] h264_nvenc 없음 → libx264 폴백");
+                Self::find_h264_encoder(EncoderType::Software)
+            }
+            EncoderType::Qsv => {
+                if let Some(codec) = ffmpeg::encoder::find_by_name("h264_qsv") {
+                    return Ok((codec, "h264_qsv".to_string()));
+                }
+                eprintln!("[ENCODER] h264_qsv 없음 → libx264 폴백");
+                Self::find_h264_encoder(EncoderType::Software)
+            }
+            EncoderType::Amf => {
+                if let Some(codec) = ffmpeg::encoder::find_by_name("h264_amf") {
+                    return Ok((codec, "h264_amf".to_string()));
+                }
+                eprintln!("[ENCODER] h264_amf 없음 → libx264 폴백");
+                Self::find_h264_encoder(EncoderType::Software)
+            }
         }
-        if let Some(codec) = ffmpeg::encoder::find(codec::Id::H264) {
-            return Ok((codec, false));
-        }
-        Err("H.264 인코더를 찾을 수 없습니다 (libx264 또는 h264_mf 필요)".to_string())
     }
 
     /// CRF → 대략적 bitrate 변환 (비 libx264 인코더용)

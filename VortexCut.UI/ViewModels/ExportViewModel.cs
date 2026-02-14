@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Timers;
@@ -16,6 +17,11 @@ namespace VortexCut.UI.ViewModels;
 /// Export 프리셋
 /// </summary>
 public record ExportPreset(string Name, uint Width, uint Height, double Fps, uint Crf);
+
+/// <summary>
+/// 인코더 옵션 (ComboBox 표시용)
+/// </summary>
+public record EncoderOption(string Name, uint EncoderType);
 
 /// <summary>
 /// Export 다이얼로그 ViewModel
@@ -47,6 +53,9 @@ public partial class ExportViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private int _selectedPresetIndex = 1; // 기본: 1080p 표준
 
+    [ObservableProperty]
+    private int _selectedEncoderIndex = 0; // 기본: 자동
+
     // === 진행 상태 ===
 
     [ObservableProperty]
@@ -76,6 +85,11 @@ public partial class ExportViewModel : ViewModelBase, IDisposable
     };
 
     /// <summary>
+    /// 사용 가능한 인코더 목록 (시작 시 탐지)
+    /// </summary>
+    public List<EncoderOption> AvailableEncoders { get; } = new();
+
+    /// <summary>
     /// Export 완료 시 호출되는 콜백 (다이얼로그 닫기용)
     /// </summary>
     public Action? OnExportComplete { get; set; }
@@ -99,6 +113,39 @@ public partial class ExportViewModel : ViewModelBase, IDisposable
 
         // 기본 프리셋 적용
         ApplyPreset(Presets[1]);
+
+        // 사용 가능한 인코더 탐지
+        DetectEncoders();
+    }
+
+    /// <summary>
+    /// 사용 가능한 인코더 탐지하여 목록 구성
+    /// </summary>
+    private void DetectEncoders()
+    {
+        AvailableEncoders.Clear();
+        AvailableEncoders.Add(new EncoderOption("자동 감지", 0));
+
+        try
+        {
+            uint mask = ExportService.DetectEncoders();
+
+            if ((mask & 1) != 0)
+                AvailableEncoders.Add(new EncoderOption("CPU (libx264)", 1));
+            if ((mask & 2) != 0)
+                AvailableEncoders.Add(new EncoderOption("NVIDIA NVENC", 2));
+            if ((mask & 4) != 0)
+                AvailableEncoders.Add(new EncoderOption("Intel QSV", 3));
+            if ((mask & 8) != 0)
+                AvailableEncoders.Add(new EncoderOption("AMD AMF", 4));
+        }
+        catch
+        {
+            // DLL 로딩 실패 시 소프트웨어만 추가
+            AvailableEncoders.Add(new EncoderOption("CPU (libx264)", 1));
+        }
+
+        SelectedEncoderIndex = 0;
     }
 
     /// <summary>
@@ -143,32 +190,26 @@ public partial class ExportViewModel : ViewModelBase, IDisposable
 
         try
         {
+            // 선택된 인코더 타입 가져오기
+            uint encoderType = 0; // Auto
+            if (SelectedEncoderIndex >= 0 && SelectedEncoderIndex < AvailableEncoders.Count)
+            {
+                encoderType = AvailableEncoders[SelectedEncoderIndex].EncoderType;
+            }
+
             // 자막 오버레이 생성 (SubtitleClipModel이 있으면)
             var subtitleListHandle = BuildSubtitleOverlays();
 
-            if (subtitleListHandle != IntPtr.Zero)
-            {
-                // 자막 포함 Export (v2) — subtitleList 소유권 Rust로 이전
-                _exportService.StartExportWithSubtitles(
-                    timelineHandle,
-                    OutputPath,
-                    Width,
-                    Height,
-                    Fps,
-                    Crf,
-                    subtitleListHandle);
-            }
-            else
-            {
-                // 자막 없음 — 기존 Export
-                _exportService.StartExport(
-                    timelineHandle,
-                    OutputPath,
-                    Width,
-                    Height,
-                    Fps,
-                    Crf);
-            }
+            // v3 API: 인코더 타입 + 자막 (자막 없으면 IntPtr.Zero)
+            _exportService.StartExportV3(
+                timelineHandle,
+                OutputPath,
+                Width,
+                Height,
+                Fps,
+                Crf,
+                encoderType,
+                subtitleListHandle);
 
             IsExporting = true;
             IsComplete = false;

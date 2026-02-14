@@ -149,6 +149,62 @@ public class ExportService : IDisposable
     }
 
     /// <summary>
+    /// 인코더 타입 선택 + 자막 포함 Export 시작 (v3)
+    /// encoderType: 0=Auto, 1=Software, 2=NVENC, 3=QSV, 4=AMF
+    /// </summary>
+    public void StartExportV3(
+        IntPtr timelineHandle,
+        string outputPath,
+        uint width,
+        uint height,
+        double fps,
+        uint crf,
+        uint encoderType,
+        IntPtr subtitleListHandle)
+    {
+        ThrowIfDisposed();
+
+        if (_jobHandle != IntPtr.Zero)
+            throw new InvalidOperationException("Export가 이미 진행 중입니다.");
+
+        if (timelineHandle == IntPtr.Zero)
+            throw new ArgumentException("Timeline handle이 null입니다");
+
+        if (string.IsNullOrEmpty(outputPath))
+            throw new ArgumentException("출력 경로가 비어있습니다");
+
+        IntPtr outputPathPtr = Marshal.StringToCoTaskMemUTF8(outputPath);
+        try
+        {
+            int result = NativeMethods.exporter_start_v3(
+                timelineHandle,
+                outputPathPtr,
+                width,
+                height,
+                fps,
+                crf,
+                encoderType,
+                subtitleListHandle,
+                out _jobHandle);
+
+            if (result != ErrorCodes.SUCCESS)
+                throw new RustException($"exporter_start_v3 실패: error {result}");
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(outputPathPtr);
+        }
+    }
+
+    /// <summary>
+    /// 사용 가능한 인코더 탐지 (비트마스크)
+    /// </summary>
+    public static uint DetectEncoders()
+    {
+        return NativeMethods.exporter_detect_encoders();
+    }
+
+    /// <summary>
     /// Export 취소
     /// </summary>
     public void Cancel()

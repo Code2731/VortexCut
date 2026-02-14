@@ -408,6 +408,29 @@ public static class NativeMethods
         out IntPtr outJob);
 
     /// <summary>
+    /// 자막 포함 Export 시작 (v3) — 인코더 타입 선택 지원
+    /// encoderType: 0=Auto, 1=Software, 2=NVENC, 3=QSV, 4=AMF
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int exporter_start_v3(
+        IntPtr timeline,
+        IntPtr outputPath,
+        uint width,
+        uint height,
+        double fps,
+        uint crf,
+        uint encoderType,
+        IntPtr subtitleList,
+        out IntPtr outJob);
+
+    /// <summary>
+    /// 사용 가능한 인코더 탐지 (비트마스크)
+    /// bit 0=libx264, bit 1=NVENC, bit 2=QSV, bit 3=AMF
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern uint exporter_detect_encoders();
+
+    /// <summary>
     /// 자막 오버레이 목록 해제 (Export 취소 시에만 사용)
     /// </summary>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
