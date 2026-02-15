@@ -754,11 +754,14 @@ dotnet build VortexCut.sln -c Release
 - [x] 실시간 프리뷰 — Slider 드래그 → Rust FFI → 캐시 클리어 → 즉시 재렌더
 - [x] 직렬화 — ClipData에 이펙트 필드 추가, 프로젝트 복원 시 Rust 동기화
 
-### Phase 9: GPU 하드웨어 가속 인코딩 (예정)
+### Phase 9: GPU 하드웨어 가속 인코딩 (완료 ✅ 2026-02-15)
 
-- [ ] NVENC/QSV/AMF 자동 탐지
-- [ ] HW 인코더 실패 시 libx264 자동 폴백
-- [ ] ExportDialog 인코더 선택 UI
+- [x] EncoderType enum (Auto/Software/NVENC/QSV/AMF) + detect_available_encoders() 비트마스크
+- [x] Auto 모드: h264_nvenc → h264_qsv → h264_amf → libx264 순서 시도
+- [x] 인코더별 품질 옵션: NVENC(VBR+CQ), QSV(global_quality), AMF(bitrate)
+- [x] GPU 실패 시 libx264 자동 폴백
+- [x] FFI: exporter_start_v3() + exporter_detect_encoders()
+- [x] ExportDialog 인코더 선택 ComboBox UI
 
 ## 9. 테스트 전략
 
@@ -1019,7 +1022,7 @@ if (width * height * 4 > MAX_FRAME_SIZE) {
 
 ---
 
-**마지막 업데이트**: 2026-02-14 (Phase 8 완료: 색보정 이펙트 시스템)
+**마지막 업데이트**: 2026-02-15 (Phase 9 완료: GPU 하드웨어 가속 인코딩)
 **작성자**: Claude Sonnet 4.5 / Claude Opus 4.6
-**Phase 8 구현 기간**: 2026-02-14 (1일)
-**Phase 8 추가 코드**: ~300 라인 (Rust effects.rs + FFI + C# 서비스 + Inspector UI)
+**Phase 9 구현 기간**: 2026-02-15 (1일)
+**Phase 9 추가 코드**: ~350 라인 (Rust EncoderType + FFI v3 + C# 서비스 + Export UI)

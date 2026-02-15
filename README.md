@@ -16,7 +16,7 @@ VortexCut은 고성능 **Rust 렌더링 엔진**(ffmpeg-next)과 현대적인 **
 - 🚀 **고성능 렌더링**: Rust + FFmpeg 기반 네이티브 렌더링 엔진 (LRU FrameCache, 상태 머신 디코더)
 - 🎨 **현대적인 UI**: C# Avalonia로 구현된 크로스 플랫폼 UI (DaVinci Resolve 스타일)
 - 📝 **타임라인 편집**: 멀티 트랙 비디오/오디오/자막 편집, Razor 분할, 스냅, 링크 클립
-- 🎬 **고품질 Export**: YUV420P 직접 전달 파이프라인 (H.264 + AAC, 색공간 변환 무손실)
+- 🎬 **고품질 Export**: YUV420P 직접 전달 + GPU 가속 인코딩 (NVENC/QSV/AMF 자동 탐지)
 - 🔊 **실시간 오디오**: cpal WASAPI 재생 + AudioMixer 다중 클립 합성
 - 🎨 **색보정 이펙트**: Brightness, Contrast, Saturation, Temperature (Rust RGBA 픽셀 연산)
 - 📝 **자막 시스템**: SRT 임포트, 타임라인 편집, Export 번인 (Avalonia→RGBA→Rust 알파 블렌딩)
@@ -28,7 +28,7 @@ VortexCut은 고성능 **Rust 렌더링 엔진**(ffmpeg-next)과 현대적인 **
 | 구성 요소 | 기술 |
 |----------|------|
 | 렌더링 엔진 | Rust 2021, ffmpeg-next 8.0 |
-| 인코딩 | H.264 (libx264) + AAC, YUV420P 직접 파이프라인 |
+| 인코딩 | H.264 (libx264/NVENC/QSV/AMF) + AAC, YUV420P 직접 파이프라인 |
 | 오디오 | cpal 0.15 (WASAPI), 48kHz stereo |
 | UI 프레임워크 | C# .NET 8, Avalonia UI 11 |
 | 연동 방식 | FFI (P/Invoke) |
@@ -147,6 +147,13 @@ dotnet test VortexCut.Tests
 
 ## 현재 상태
 
+### ✅ Phase 9 완료 (2026-02-15) - GPU 하드웨어 가속 인코딩
+
+- [x] **NVENC/QSV/AMF 자동 탐지** - `exporter_detect_encoders()` 비트마스크
+- [x] **Auto 모드** - NVENC → QSV → AMF → libx264 순서 시도 + 자동 폴백
+- [x] **인코더별 품질 옵션** - NVENC(VBR+CQ), QSV(global_quality), AMF(bitrate)
+- [x] **Export Dialog UI** - 인코더 선택 ComboBox
+
 ### ✅ Phase 8 완료 (2026-02-14) - 색보정 이펙트 시스템
 
 - [x] **4가지 색보정 이펙트** - Brightness, Contrast, Saturation, Temperature
@@ -183,7 +190,10 @@ dotnet test VortexCut.Tests
 - [x] **썸네일 스트립** - 비동기 생성, 캐싱, LOD 시스템
 
 ### 📋 계획
-- [ ] GPU 하드웨어 가속 인코딩 (NVENC/QSV/AMF)
+- [ ] 트랜지션 시스템 (Crossfade/Dissolve/Wipe)
+- [ ] 키프레임 애니메이션
+- [ ] 오디오 이펙트 (볼륨/페이드)
+- [ ] 속도 조절 (Slow-mo/배속)
 
 ## 문서
 
@@ -218,4 +228,4 @@ dotnet test VortexCut.Tests
 
 ---
 
-**마지막 업데이트**: 2026-02-14
+**마지막 업데이트**: 2026-02-15
