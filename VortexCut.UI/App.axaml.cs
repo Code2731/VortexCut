@@ -32,6 +32,7 @@ public partial class App : Application
         // UI 서비스
         services.AddSingleton<ProjectService>();
         services.AddSingleton<IProjectService>(sp => sp.GetRequiredService<ProjectService>());
+        services.AddSingleton<ProjectSerializationService>();
         services.AddSingleton<IAudioPlaybackService, AudioPlaybackService>();
         services.AddSingleton<ProxyService>();
 

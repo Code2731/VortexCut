@@ -162,6 +162,13 @@ dotnet test VortexCut.Tests
 
 ## 현재 상태
 
+### ✅ Phase 12 완료 (2026-02-16) - 코드 모듈화 리팩토링
+
+- [x] **MainWindow code-behind 경량화** - 567줄 → 322줄 (-43%), 7개 비즈니스 로직 메서드를 TimelineViewModel로 이동
+- [x] **InspectorView 로직 분리** - Properties 슬라이더 변경/리셋 로직을 InspectorViewModel로 이동
+- [x] **ProjectService God Object 분할** - 754줄 → 304줄 (-60%), 직렬화 전체를 ProjectSerializationService로 분리
+- [x] **기능 변경 0** - 순수 구조 리팩토링, code-behind → ViewModel, God Object 분할만 수행
+
 ### ✅ Phase 11 완료 (2026-02-16) - 워크스페이스 UI 통합 + 트랙 뮤트
 
 - [x] **워크스페이스 전환 시스템** - 상단 Editing/Color/Audio/Effects 버튼 → 우측 Inspector 패널 콘텐츠 전환
@@ -261,4 +268,4 @@ dotnet test VortexCut.Tests
 
 ---
 
-**마지막 업데이트**: 2026-02-16
+**마지막 업데이트**: 2026-02-16 (Phase 12)

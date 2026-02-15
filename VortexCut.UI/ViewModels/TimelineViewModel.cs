@@ -5,6 +5,7 @@ using VortexCut.Core.Interfaces;
 using VortexCut.Core.Models;
 using VortexCut.Core.Services;
 using VortexCut.UI.Services;
+using VortexCut.UI.Services.Actions;
 
 namespace VortexCut.UI.ViewModels;
 
@@ -302,18 +303,192 @@ public partial class TimelineViewModel : ViewModelBase
         {
             if (RippleModeEnabled)
             {
-                // 리플 모드: RippleDeleteAction으로 Undo 지원
-                var action = new Services.Actions.RippleDeleteAction(Clips, SelectedClip, _projectService);
+                var action = new RippleDeleteAction(Clips, SelectedClip, _projectService);
                 _undoRedoService.ExecuteAction(action);
             }
             else
             {
-                // 일반 모드: DeleteClipAction (FFI 연동)
-                var action = new Services.Actions.DeleteClipAction(Clips, _projectService, SelectedClip);
+                var action = new DeleteClipAction(Clips, _projectService, SelectedClip);
                 _undoRedoService.ExecuteAction(action);
             }
             SelectedClip = null;
         }
+    }
+
+    /// <summary>
+    /// 선택된 클립들 삭제 (Delete/Backspace 키, 다중 선택 지원)
+    /// </summary>
+    [RelayCommand]
+    public void DeleteSelectedClips()
+    {
+        var clipsToDelete = SelectedClips.ToList();
+        if (clipsToDelete.Count == 0) return;
+
+        if (RippleModeEnabled)
+        {
+            if (clipsToDelete.Count == 1)
+            {
+                var action = new RippleDeleteAction(Clips, clipsToDelete[0], _projectService);
+                _undoRedoService.ExecuteAction(action);
+            }
+            else
+            {
+                var actions = clipsToDelete
+                    .Select(c => (IUndoableAction)new RippleDeleteAction(Clips, c, _projectService))
+                    .ToList();
+                _undoRedoService.ExecuteAction(new CompositeAction("리플 삭제 (다중)", actions));
+            }
+        }
+        else
+        {
+            if (clipsToDelete.Count == 1)
+            {
+                var action = new DeleteClipAction(Clips, _projectService, clipsToDelete[0]);
+                _undoRedoService.ExecuteAction(action);
+            }
+            else
+            {
+                var actions = clipsToDelete
+                    .Select(c => (IUndoableAction)new DeleteClipAction(Clips, _projectService, c))
+                    .ToList();
+                _undoRedoService.ExecuteAction(new CompositeAction("클립 삭제 (다중)", actions));
+            }
+        }
+
+        SelectedClips.Clear();
+        SelectedClip = null;
+    }
+
+    /// <summary>
+    /// 선택된 클립들 복제 (Ctrl+D, 원본 바로 뒤에 배치)
+    /// </summary>
+    [RelayCommand]
+    public void DuplicateSelectedClips()
+    {
+        var clipsToDuplicate = SelectedClips.ToList();
+        if (clipsToDuplicate.Count == 0) return;
+
+        SelectedClips.Clear();
+
+        var actions = new List<IUndoableAction>();
+        foreach (var clip in clipsToDuplicate)
+        {
+            var addAction = new AddClipAction(
+                Clips, _projectService,
+                clip.FilePath, clip.EndTimeMs, clip.DurationMs,
+                clip.TrackIndex, clip.ProxyFilePath);
+            actions.Add(addAction);
+        }
+
+        if (actions.Count == 1)
+            _undoRedoService.ExecuteAction(actions[0]);
+        else
+            _undoRedoService.ExecuteAction(new CompositeAction("클립 복제 (다중)", actions));
+    }
+
+    /// <summary>
+    /// 모든 클립 선택 (Ctrl+A)
+    /// </summary>
+    [RelayCommand]
+    public void SelectAllClips()
+    {
+        SelectedClips.Clear();
+        foreach (var clip in Clips)
+            SelectedClips.Add(clip);
+    }
+
+    /// <summary>
+    /// 이전 키프레임/마커로 이동 (J 키)
+    /// </summary>
+    [RelayCommand]
+    public void JumpToPreviousKeyframe()
+    {
+        long? previousTime = null;
+
+        foreach (var clip in SelectedClips)
+        {
+            var keyframeSystem = GetKeyframeSystem(clip, SelectedKeyframeSystem);
+            if (keyframeSystem != null)
+            {
+                foreach (var kf in keyframeSystem.Keyframes)
+                {
+                    var kfTime = clip.StartTimeMs + (long)(kf.Time * 1000);
+                    if (kfTime < CurrentTimeMs && (!previousTime.HasValue || kfTime > previousTime.Value))
+                        previousTime = kfTime;
+                }
+            }
+        }
+
+        foreach (var marker in Markers)
+        {
+            if (marker.TimeMs < CurrentTimeMs && (!previousTime.HasValue || marker.TimeMs > previousTime.Value))
+                previousTime = marker.TimeMs;
+        }
+
+        if (previousTime.HasValue)
+            CurrentTimeMs = previousTime.Value;
+    }
+
+    /// <summary>
+    /// 다음 키프레임/마커로 이동 (L 키)
+    /// </summary>
+    [RelayCommand]
+    public void JumpToNextKeyframe()
+    {
+        long? nextTime = null;
+
+        foreach (var clip in SelectedClips)
+        {
+            var keyframeSystem = GetKeyframeSystem(clip, SelectedKeyframeSystem);
+            if (keyframeSystem != null)
+            {
+                foreach (var kf in keyframeSystem.Keyframes)
+                {
+                    var kfTime = clip.StartTimeMs + (long)(kf.Time * 1000);
+                    if (kfTime > CurrentTimeMs && (!nextTime.HasValue || kfTime < nextTime.Value))
+                        nextTime = kfTime;
+                }
+            }
+        }
+
+        foreach (var marker in Markers)
+        {
+            if (marker.TimeMs > CurrentTimeMs && (!nextTime.HasValue || marker.TimeMs < nextTime.Value))
+                nextTime = marker.TimeMs;
+        }
+
+        if (nextTime.HasValue)
+            CurrentTimeMs = nextTime.Value;
+    }
+
+    /// <summary>
+    /// 선택된 키프레임의 보간 타입 변경 (F9 / Shift+F9 / Ctrl+Shift+F9)
+    /// </summary>
+    [RelayCommand]
+    public void ApplyKeyframeInterpolation(InterpolationType interpolation)
+    {
+        foreach (var clip in SelectedClips)
+        {
+            var keyframeSystem = GetKeyframeSystem(clip, SelectedKeyframeSystem);
+            if (keyframeSystem != null)
+            {
+                foreach (var keyframe in keyframeSystem.Keyframes)
+                    keyframe.Interpolation = interpolation;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 타임라인 끝 시간으로 이동 (End 키)
+    /// </summary>
+    [RelayCommand]
+    public void JumpToEnd()
+    {
+        var maxTime = Clips
+            .Select(c => c.EndTimeMs)
+            .DefaultIfEmpty(0)
+            .Max();
+        CurrentTimeMs = maxTime;
     }
 
     /// <summary>

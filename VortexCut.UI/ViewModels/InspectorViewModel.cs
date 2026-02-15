@@ -19,6 +19,42 @@ public class InspectorViewModel
         _timeline = timeline;
     }
 
+    // ==================== Properties (Editing) ====================
+
+    /// <summary>
+    /// Properties 슬라이더 값 적용 (StartTime, Duration, Opacity → 모델 + FFI)
+    /// </summary>
+    public void ApplyPropertiesChange(ClipModel clip, long startTimeMs, long durationMs, double opacityPercent)
+    {
+        clip.StartTimeMs = startTimeMs;
+        clip.DurationMs = durationMs;
+        _projectService.SyncClipToRust(clip);
+
+        // Opacity → 키프레임 첫 번째 값으로 설정 (간이 편집)
+        var opacityValue = opacityPercent / 100.0;
+        if (clip.OpacityKeyframes.Keyframes.Count == 0)
+        {
+            clip.OpacityKeyframes.AddKeyframe(0, opacityValue);
+        }
+        else
+        {
+            var kf = clip.OpacityKeyframes.Keyframes[0];
+            clip.OpacityKeyframes.UpdateKeyframe(kf, kf.Time, opacityValue);
+        }
+    }
+
+    /// <summary>
+    /// Properties 초기화 (Opacity 리셋)
+    /// </summary>
+    public void ResetProperties(ClipModel clip)
+    {
+        if (clip.OpacityKeyframes.Keyframes.Count > 0)
+        {
+            var kf = clip.OpacityKeyframes.Keyframes[0];
+            clip.OpacityKeyframes.UpdateKeyframe(kf, kf.Time, 1.0);
+        }
+    }
+
     // ==================== Color ====================
 
     /// <summary>

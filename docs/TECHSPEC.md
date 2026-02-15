@@ -1,7 +1,7 @@
 # VortexCut 기술 명세서 (Technical Specification)
 
 > **작성일**: 2026-02-16
-> **버전**: 0.12.0 (워크스페이스 UI 통합 + 트랙 뮤트 FFI)
+> **버전**: 0.13.0 (코드 모듈화 리팩토링)
 > **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절, 워크스페이스 전환
 
 ## 1. 개요
@@ -77,8 +77,9 @@ App.axaml.cs
 ├── IRenderService → RenderService   (Interop, Singleton)
 ├── ProjectService(IRenderService, TimelineService)  (Singleton)
 │   └── IProjectService → ProjectService
+├── ProjectSerializationService(ProjectService)  (Singleton)
 ├── IAudioPlaybackService → AudioPlaybackService  (Singleton)
-└── MainViewModel(ProjectService, IAudioPlaybackService)
+└── MainViewModel(ProjectService, ProjectSerializationService, IAudioPlaybackService)
     ├── TimelineViewModel(IProjectService)
     ├── PreviewViewModel(IProjectService, IAudioPlaybackService)
     └── InspectorViewModel(IProjectService, ...)
@@ -140,7 +141,8 @@ VortexCut/
 │   │   ├── ClipCanvasPanel.DragDrop.cs    # 드래그&드롭 (~80줄)
 │   │   └── ClipCanvasPanel.Helpers.cs     # 좌표 변환 유틸 (~150줄)
 │   └── Services/
-│       ├── ProjectService.cs              # IProjectService 구현 (DI: IRenderService 주입)
+│       ├── ProjectService.cs              # IProjectService 구현 (런타임 클립 관리)
+│       ├── ProjectSerializationService.cs # 프로젝트 직렬화 (Extract/Restore + DTO 변환)
 │       └── Actions/                       # Undo/Redo 액션 (IProjectService 의존)
 └── VortexCut.Tests/          # C# 단위 테스트
 ```
@@ -867,6 +869,17 @@ dotnet build VortexCut.sln -c Release
 - [x] ClipModel Volume/Speed/FadeInMs/FadeOutMs 프로퍼티 + 직렬화
 - [x] Inspector Audio 탭 — Volume(0~200%), Speed(0.25x~4.0x), Fade(0~5000ms) 슬라이더
 
+### Phase 12: 코드 모듈화 리팩토링 (완료 ✅ 2026-02-16)
+
+- [x] MainWindow.axaml.cs 567줄 → 322줄 (-43%) — 7개 비즈니스 로직 메서드를 TimelineViewModel로 이동
+- [x] TimelineViewModel에 RelayCommand 추가: DeleteSelectedClips, DuplicateSelectedClips, SelectAllClips, JumpToPreviousKeyframe, JumpToNextKeyframe, ApplyKeyframeInterpolation, JumpToEnd
+- [x] InspectorView.axaml.cs Properties 슬라이더 변경/리셋 → InspectorViewModel.ApplyPropertiesChange/ResetProperties 위임
+- [x] ProjectService.cs 754줄 → 304줄 (-60%) — 직렬화 전체를 ProjectSerializationService로 분리
+- [x] ProjectSerializationService (479줄 신규) — ExtractProjectData/RestoreProjectData + 15개 static DTO 변환
+- [x] ProjectService에 internal 접근자 추가 (TimelineServiceInternal 등) — 직렬화 서비스용
+- [x] DI 컨테이너에 ProjectSerializationService 등록, MainViewModel 생성자 갱신
+- [x] MainViewModel.FileOperations.cs — _projectService → _serializationService 호출 변경
+
 ### Phase 11: 워크스페이스 UI 통합 + 트랙 뮤트 FFI (완료 ✅ 2026-02-16)
 
 - [x] Inspector TabControl(5탭) 제거 → 4개 독립 패널 (Properties/Color/Audio/Effects) 전환 구조
@@ -1139,7 +1152,6 @@ if (width * height * 4 > MAX_FRAME_SIZE) {
 
 ---
 
-**마지막 업데이트**: 2026-02-16 (Phase 11 완료: 워크스페이스 UI 통합 + 트랙 뮤트 FFI)
+**마지막 업데이트**: 2026-02-16 (Phase 12 완료: 코드 모듈화 리팩토링)
 **작성자**: Claude Sonnet 4.5 / Claude Opus 4.6
-**Phase 11 구현 기간**: 2026-02-16 (1일)
-**Phase 11 추가 코드**: ~930 라인 (Inspector 재구성 + Properties 패널 + 워크스페이스 시스템 + 트랙 뮤트 FFI 파이프라인)
+**Phase 12 내용**: 순수 구조 리팩토링 — MainWindow(-43%), ProjectService(-60%) code-behind → ViewModel, God Object 분할

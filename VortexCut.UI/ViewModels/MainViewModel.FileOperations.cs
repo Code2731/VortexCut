@@ -205,7 +205,7 @@ public partial class MainViewModel
 
         try
         {
-            var data = _projectService.ExtractProjectData(this);
+            var data = _serializationService.ExtractProjectData(this);
 
             // 이미 저장된 경로가 있으면 덮어쓰기, 없으면 Save As 동작
             var currentProject = _projectService.CurrentProject;
@@ -247,7 +247,7 @@ public partial class MainViewModel
 
         try
         {
-            var data = _projectService.ExtractProjectData(this);
+            var data = _serializationService.ExtractProjectData(this);
             var filePath = await ShowSaveDialog(".vortex");
             if (string.IsNullOrEmpty(filePath))
                 return;
@@ -292,7 +292,7 @@ public partial class MainViewModel
                 return;
             }
 
-            _projectService.RestoreProjectData(data, this);
+            _serializationService.RestoreProjectData(data, this);
 
             var currentProject = _projectService.CurrentProject;
             if (currentProject != null)

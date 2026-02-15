@@ -254,50 +254,25 @@ public partial class InspectorView : UserControl
         if (_isUpdatingSliders) return;
 
         var clip = GetSelectedClip();
-        if (clip == null) return;
+        var inspectorVm = GetInspectorVm();
+        if (clip == null || inspectorVm == null) return;
 
-        var mainVm = DataContext as MainViewModel;
-
-        if (sender == _startTimeSlider)
-        {
-            clip.StartTimeMs = (long)(_startTimeSlider?.Value ?? 0);
-            mainVm?.Timeline.ProjectServiceRef.SyncClipToRust(clip);
-        }
-        else if (sender == _durationSlider)
-        {
-            clip.DurationMs = (long)(_durationSlider?.Value ?? 1000);
-            mainVm?.Timeline.ProjectServiceRef.SyncClipToRust(clip);
-        }
-        else if (sender == _opacitySlider)
-        {
-            // Opacity 값을 키프레임 첫 번째 값으로 설정 (간이 편집)
-            var opacityValue = (_opacitySlider?.Value ?? 100) / 100.0;
-            if (clip.OpacityKeyframes.Keyframes.Count == 0)
-            {
-                clip.OpacityKeyframes.AddKeyframe(0, opacityValue);
-            }
-            else
-            {
-                var kf = clip.OpacityKeyframes.Keyframes[0];
-                clip.OpacityKeyframes.UpdateKeyframe(kf, kf.Time, opacityValue);
-            }
-        }
+        long startTimeMs = (long)(_startTimeSlider?.Value ?? 0);
+        long durationMs = (long)(_durationSlider?.Value ?? 1000);
+        double opacityPercent = _opacitySlider?.Value ?? 100;
 
         UpdatePropertiesValueTexts();
+        inspectorVm.ApplyPropertiesChange(clip, startTimeMs, durationMs, opacityPercent);
     }
 
     private void OnResetPropertiesClick(object? sender, RoutedEventArgs e)
     {
         var clip = GetSelectedClip();
-        if (clip == null) return;
+        var inspectorVm = GetInspectorVm();
+        if (clip == null || inspectorVm == null) return;
 
+        inspectorVm.ResetProperties(clip);
         SetSliderValue(_opacitySlider, 100);
-        if (clip.OpacityKeyframes.Keyframes.Count > 0)
-        {
-            var kf = clip.OpacityKeyframes.Keyframes[0];
-            clip.OpacityKeyframes.UpdateKeyframe(kf, kf.Time, 1.0);
-        }
-
         UpdatePropertiesValueTexts();
     }
 

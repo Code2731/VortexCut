@@ -1,4 +1,3 @@
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -6,7 +5,6 @@ using Avalonia.Media;
 using VortexCut.Core.Models;
 using VortexCut.UI.ViewModels;
 using VortexCut.UI.Services;
-using VortexCut.UI.Services.Actions;
 
 namespace VortexCut.UI.Views;
 
@@ -124,22 +122,12 @@ public partial class MainWindow : Window
         // Function keys (After Effects style)
         if (e.Key == Key.F9)
         {
-            // F9: Easy Ease (EaseInOut)
-            ApplyInterpolationToSelectedKeyframes(InterpolationType.EaseInOut);
-            e.Handled = true;
-            return;
-        }
-        if (e.Key == Key.F9 && isShift && !isCtrl)
-        {
-            // Shift+F9: Easy Ease In
-            ApplyInterpolationToSelectedKeyframes(InterpolationType.EaseIn);
-            e.Handled = true;
-            return;
-        }
-        if (e.Key == Key.F9 && isShift && isCtrl)
-        {
-            // Ctrl+Shift+F9: Easy Ease Out
-            ApplyInterpolationToSelectedKeyframes(InterpolationType.EaseOut);
+            if (isCtrl && isShift)
+                _viewModel.Timeline.ApplyKeyframeInterpolationCommand.Execute(InterpolationType.EaseOut);
+            else if (isShift)
+                _viewModel.Timeline.ApplyKeyframeInterpolationCommand.Execute(InterpolationType.EaseIn);
+            else
+                _viewModel.Timeline.ApplyKeyframeInterpolationCommand.Execute(InterpolationType.EaseInOut);
             e.Handled = true;
             return;
         }
@@ -194,46 +182,36 @@ public partial class MainWindow : Window
 
             // 네비게이션 (After Effects style)
             case Key.J:
-                // J: 이전 키프레임으로 이동
-                JumpToPreviousKeyframe();
+                _viewModel.Timeline.JumpToPreviousKeyframeCommand.Execute(null);
                 e.Handled = true;
                 break;
 
             case Key.L:
-                // L: 다음 키프레임으로 이동
-                JumpToNextKeyframe();
+                _viewModel.Timeline.JumpToNextKeyframeCommand.Execute(null);
                 e.Handled = true;
                 break;
 
             case Key.Home:
-                // Home: 타임라인 시작으로
                 _viewModel.Timeline.CurrentTimeMs = 0;
                 e.Handled = true;
                 break;
 
             case Key.End:
-                // End: 타임라인 끝으로
-                var maxTime = _viewModel.Timeline.Clips
-                    .Select(c => c.EndTimeMs)
-                    .DefaultIfEmpty(0)
-                    .Max();
-                _viewModel.Timeline.CurrentTimeMs = maxTime;
+                _viewModel.Timeline.JumpToEndCommand.Execute(null);
                 e.Handled = true;
                 break;
 
             // 편집
             case Key.Delete:
             case Key.Back:
-                // Delete/Backspace: 선택된 클립 삭제
-                DeleteSelectedClips();
+                _viewModel.Timeline.DeleteSelectedClipsCommand.Execute(null);
                 e.Handled = true;
                 break;
 
             case Key.D:
                 if (isCtrl)
                 {
-                    // Ctrl+D: 선택된 클립 복제
-                    DuplicateSelectedClips();
+                    _viewModel.Timeline.DuplicateSelectedClipsCommand.Execute(null);
                     e.Handled = true;
                 }
                 break;
@@ -297,8 +275,7 @@ public partial class MainWindow : Window
             case Key.A:
                 if (isCtrl)
                 {
-                    // Ctrl+A: 모든 클립 선택
-                    SelectAllClips();
+                    _viewModel.Timeline.SelectAllClipsCommand.Execute(null);
                     e.Handled = true;
                 }
                 break;
@@ -312,212 +289,6 @@ public partial class MainWindow : Window
                     e.Handled = true;
                 }
                 break;
-        }
-    }
-
-    private void ApplyInterpolationToSelectedKeyframes(InterpolationType interpolation)
-    {
-        if (_viewModel == null) return;
-
-        // 선택된 클립의 키프레임에 보간 타입 적용
-        foreach (var clip in _viewModel.Timeline.SelectedClips)
-        {
-            var keyframeSystem = GetCurrentKeyframeSystem(clip);
-            if (keyframeSystem != null)
-            {
-                foreach (var keyframe in keyframeSystem.Keyframes)
-                {
-                    keyframe.Interpolation = interpolation;
-                }
-            }
-        }
-    }
-
-    private void JumpToPreviousKeyframe()
-    {
-        if (_viewModel == null) return;
-
-        var currentTime = _viewModel.Timeline.CurrentTimeMs;
-        long? previousTime = null;
-
-        // 모든 키프레임과 마커 중 이전 위치 찾기
-        foreach (var clip in _viewModel.Timeline.SelectedClips)
-        {
-            var keyframeSystem = GetCurrentKeyframeSystem(clip);
-            if (keyframeSystem != null)
-            {
-                foreach (var kf in keyframeSystem.Keyframes)
-                {
-                    var kfTime = clip.StartTimeMs + (long)(kf.Time * 1000);
-                    if (kfTime < currentTime)
-                    {
-                        if (!previousTime.HasValue || kfTime > previousTime.Value)
-                        {
-                            previousTime = kfTime;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 마커도 확인
-        foreach (var marker in _viewModel.Timeline.Markers)
-        {
-            if (marker.TimeMs < currentTime)
-            {
-                if (!previousTime.HasValue || marker.TimeMs > previousTime.Value)
-                {
-                    previousTime = marker.TimeMs;
-                }
-            }
-        }
-
-        if (previousTime.HasValue)
-        {
-            _viewModel.Timeline.CurrentTimeMs = previousTime.Value;
-        }
-    }
-
-    private void JumpToNextKeyframe()
-    {
-        if (_viewModel == null) return;
-
-        var currentTime = _viewModel.Timeline.CurrentTimeMs;
-        long? nextTime = null;
-
-        // 모든 키프레임과 마커 중 다음 위치 찾기
-        foreach (var clip in _viewModel.Timeline.SelectedClips)
-        {
-            var keyframeSystem = GetCurrentKeyframeSystem(clip);
-            if (keyframeSystem != null)
-            {
-                foreach (var kf in keyframeSystem.Keyframes)
-                {
-                    var kfTime = clip.StartTimeMs + (long)(kf.Time * 1000);
-                    if (kfTime > currentTime)
-                    {
-                        if (!nextTime.HasValue || kfTime < nextTime.Value)
-                        {
-                            nextTime = kfTime;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 마커도 확인
-        foreach (var marker in _viewModel.Timeline.Markers)
-        {
-            if (marker.TimeMs > currentTime)
-            {
-                if (!nextTime.HasValue || marker.TimeMs < nextTime.Value)
-                {
-                    nextTime = marker.TimeMs;
-                }
-            }
-        }
-
-        if (nextTime.HasValue)
-        {
-            _viewModel.Timeline.CurrentTimeMs = nextTime.Value;
-        }
-    }
-
-    private void DeleteSelectedClips()
-    {
-        if (_viewModel == null) return;
-
-        var clipsToDelete = _viewModel.Timeline.SelectedClips.ToList();
-        if (clipsToDelete.Count == 0) return;
-
-        if (_viewModel.Timeline.RippleModeEnabled)
-        {
-            // 리플 모드: RippleDeleteAction으로 처리
-            if (clipsToDelete.Count == 1)
-            {
-                var action = new RippleDeleteAction(
-                    _viewModel.Timeline.Clips, clipsToDelete[0], _viewModel.ProjectService);
-                _viewModel.Timeline.UndoRedo.ExecuteAction(action);
-            }
-            else
-            {
-                var actions = clipsToDelete
-                    .Select(c => (Core.Interfaces.IUndoableAction)new RippleDeleteAction(
-                        _viewModel.Timeline.Clips, c, _viewModel.ProjectService))
-                    .ToList();
-                var composite = new CompositeAction("리플 삭제 (다중)", actions);
-                _viewModel.Timeline.UndoRedo.ExecuteAction(composite);
-            }
-        }
-        else
-        {
-            // 일반 모드: DeleteClipAction (FFI 연동)
-            if (clipsToDelete.Count == 1)
-            {
-                var action = new DeleteClipAction(
-                    _viewModel.Timeline.Clips,
-                    _viewModel.ProjectService,
-                    clipsToDelete[0]);
-                _viewModel.Timeline.UndoRedo.ExecuteAction(action);
-            }
-            else
-            {
-                var actions = clipsToDelete
-                    .Select(c => (Core.Interfaces.IUndoableAction)new DeleteClipAction(
-                        _viewModel.Timeline.Clips, _viewModel.ProjectService, c))
-                    .ToList();
-                var composite = new CompositeAction("클립 삭제 (다중)", actions);
-                _viewModel.Timeline.UndoRedo.ExecuteAction(composite);
-            }
-        }
-
-        _viewModel.Timeline.SelectedClips.Clear();
-        _viewModel.Timeline.SelectedClip = null;
-    }
-
-    private void DuplicateSelectedClips()
-    {
-        if (_viewModel == null) return;
-
-        var clipsToDuplicate = _viewModel.Timeline.SelectedClips.ToList();
-        if (clipsToDuplicate.Count == 0) return;
-
-        _viewModel.Timeline.SelectedClips.Clear();
-
-        // 각 복제를 AddClipAction으로 처리
-        var actions = new List<Core.Interfaces.IUndoableAction>();
-        foreach (var clip in clipsToDuplicate)
-        {
-            var addAction = new AddClipAction(
-                _viewModel.Timeline.Clips,
-                _viewModel.ProjectService,
-                clip.FilePath,
-                clip.EndTimeMs, // 원본 바로 뒤에 배치
-                clip.DurationMs,
-                clip.TrackIndex,
-                clip.ProxyFilePath);
-            actions.Add(addAction);
-        }
-
-        if (actions.Count == 1)
-        {
-            _viewModel.Timeline.UndoRedo.ExecuteAction(actions[0]);
-        }
-        else
-        {
-            var composite = new CompositeAction("클립 복제 (다중)", actions);
-            _viewModel.Timeline.UndoRedo.ExecuteAction(composite);
-        }
-    }
-
-    private void SelectAllClips()
-    {
-        if (_viewModel == null) return;
-
-        _viewModel.Timeline.SelectedClips.Clear();
-        foreach (var clip in _viewModel.Timeline.Clips)
-        {
-            _viewModel.Timeline.SelectedClips.Add(clip);
         }
     }
 
@@ -548,20 +319,4 @@ public partial class MainWindow : Window
         exportVm.Dispose();
     }
 
-    /// <summary>
-    private KeyframeSystem? GetCurrentKeyframeSystem(ClipModel clip)
-    {
-        if (_viewModel == null) return null;
-
-        return _viewModel.Timeline.SelectedKeyframeSystem switch
-        {
-            KeyframeSystemType.Opacity => clip.OpacityKeyframes,
-            KeyframeSystemType.Volume => clip.VolumeKeyframes,
-            KeyframeSystemType.PositionX => clip.PositionXKeyframes,
-            KeyframeSystemType.PositionY => clip.PositionYKeyframes,
-            KeyframeSystemType.Scale => clip.ScaleKeyframes,
-            KeyframeSystemType.Rotation => clip.RotationKeyframes,
-            _ => null
-        };
-    }
 }

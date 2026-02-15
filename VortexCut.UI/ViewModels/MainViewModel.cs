@@ -13,6 +13,7 @@ namespace VortexCut.UI.ViewModels;
 public partial class MainViewModel : ViewModelBase
 {
     private readonly ProjectService _projectService;
+    private readonly ProjectSerializationService _serializationService;
     private readonly ProxyService _proxyService;
     private IStorageProvider? _storageProvider;
     private ToastService? _toastService;
@@ -61,9 +62,10 @@ public partial class MainViewModel : ViewModelBase
         ActiveWorkspace = workspace;
     }
 
-    public MainViewModel(ProjectService projectService, IAudioPlaybackService audioPlayback)
+    public MainViewModel(ProjectService projectService, ProjectSerializationService serializationService, IAudioPlaybackService audioPlayback)
     {
         _projectService = projectService;
+        _serializationService = serializationService;
         _proxyService = new ProxyService();
         _projectBin = new ProjectBinViewModel();
         _timeline = new TimelineViewModel(_projectService);
