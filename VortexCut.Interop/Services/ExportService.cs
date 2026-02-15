@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using VortexCut.Core.Interfaces;
 using VortexCut.Interop.Types;
 
 namespace VortexCut.Interop.Services;
@@ -7,7 +8,7 @@ namespace VortexCut.Interop.Services;
 /// Export 서비스 - Rust exporter FFI 래퍼
 /// 타임라인을 MP4 파일로 내보내기 (백그라운드 스레드)
 /// </summary>
-public class ExportService : IDisposable
+public class ExportService : IExportService
 {
     private IntPtr _jobHandle = IntPtr.Zero;
     private bool _disposed;
@@ -225,6 +226,22 @@ public class ExportService : IDisposable
             NativeMethods.exporter_destroy(_jobHandle);
             _jobHandle = IntPtr.Zero;
         }
+    }
+
+    /// <summary>
+    /// 자막 오버레이 리스트 생성 (Rust 핸들 반환)
+    /// </summary>
+    public IntPtr CreateSubtitleList()
+    {
+        return NativeMethods.exporter_create_subtitle_list();
+    }
+
+    /// <summary>
+    /// 자막 오버레이 리스트에 항목 추가
+    /// </summary>
+    public void SubtitleListAdd(IntPtr listHandle, long startMs, long endMs, int x, int y, uint width, uint height, IntPtr rgbaPtr, uint rgbaLen)
+    {
+        NativeMethods.exporter_subtitle_list_add(listHandle, startMs, endMs, x, y, width, height, rgbaPtr, rgbaLen);
     }
 
     private void ThrowIfDisposed()

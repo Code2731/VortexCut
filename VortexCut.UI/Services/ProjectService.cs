@@ -1,3 +1,4 @@
+using VortexCut.Core.Interfaces;
 using VortexCut.Core.Models;
 using VortexCut.Core.Serialization;
 using VortexCut.UI.ViewModels;
@@ -9,10 +10,10 @@ namespace VortexCut.UI.Services;
 /// <summary>
 /// 프로젝트 관리 서비스 (Rust Timeline/Renderer 연동)
 /// </summary>
-public class ProjectService : IDisposable
+public class ProjectService : IProjectService
 {
     private readonly TimelineService _timelineService;
-    private readonly RenderService _renderService;
+    private readonly IRenderService _renderService;
     private Project? _currentProject;
     private ulong _defaultVideoTrackId;
     private TimelineHandle? _timelineHandle;
@@ -24,10 +25,10 @@ public class ProjectService : IDisposable
     /// </summary>
     public IntPtr TimelineRawHandle => _timelineHandle?.DangerousGetHandle() ?? IntPtr.Zero;
 
-    public ProjectService()
+    public ProjectService(IRenderService renderService, TimelineService timelineService)
     {
-        _timelineService = new TimelineService();
-        _renderService = new RenderService();
+        _renderService = renderService;
+        _timelineService = timelineService;
     }
 
     /// <summary>
@@ -63,7 +64,7 @@ public class ProjectService : IDisposable
             // Renderer 생성 (TimelineHandle 가져오기)
             System.Diagnostics.Debug.WriteLine("   [6/6] Creating renderer...");
             _timelineHandle = _timelineService.GetTimelineHandle();
-            _renderService.CreateRenderer(_timelineHandle);
+            _renderService.CreateRenderer(_timelineHandle!.DangerousGetHandle());
 
             System.Diagnostics.Debug.WriteLine("   ✅ ProjectService.CreateProject COMPLETE");
         }
@@ -223,6 +224,15 @@ public class ProjectService : IDisposable
     }
 
     /// <summary>
+    /// 클립 트랜지션 타입 설정 (Inspector Transition 탭에서 호출)
+    /// </summary>
+    public void SetClipTransition(ulong clipId, TransitionType type)
+    {
+        try { _timelineService.SetClipTransition(clipId, (uint)type); }
+        catch { /* Timeline 미생성 시 무시 */ }
+    }
+
+    /// <summary>
     /// 클립 이펙트 설정 (Inspector Color 탭에서 호출)
     /// </summary>
     public void SetClipEffects(ulong clipId, float brightness, float contrast, float saturation, float temperature)
@@ -243,10 +253,25 @@ public class ProjectService : IDisposable
     /// <summary>
     /// 특정 시간의 프레임 렌더링 (프레임 스킵 시 null 반환)
     /// </summary>
-    public RenderedFrame? RenderFrame(long timestampMs)
+    public IRenderedFrame? RenderFrame(long timestampMs)
     {
-        var frame = _renderService.RenderFrame(timestampMs);
-        return frame;
+        return _renderService.RenderFrame(timestampMs);
+    }
+
+    /// <summary>
+    /// 비디오 파일 메타데이터 조회
+    /// </summary>
+    public VideoInfo GetVideoInfo(string filePath)
+    {
+        return _renderService.GetVideoInfo(filePath);
+    }
+
+    /// <summary>
+    /// 비디오 썸네일 생성
+    /// </summary>
+    public IRenderedFrame GenerateThumbnail(string filePath, long timestampMs, uint thumbWidth, uint thumbHeight)
+    {
+        return _renderService.GenerateThumbnail(filePath, timestampMs, thumbWidth, thumbHeight);
     }
 
     /// <summary>
@@ -333,7 +358,7 @@ public class ProjectService : IDisposable
         _timelineService.CreateTimeline(data.Width, data.Height, data.Fps);
 
         _timelineHandle = _timelineService.GetTimelineHandle();
-        _renderService.CreateRenderer(_timelineHandle);
+        _renderService.CreateRenderer(_timelineHandle!.DangerousGetHandle());
 
         // 3) UI 뷰모델 초기화
         var timelineVm = mainVm.Timeline;
@@ -464,6 +489,8 @@ public class ProjectService : IDisposable
                 SetClipSpeed(clipId, clipModel.Speed);
             if (clipModel.FadeInMs > 0 || clipModel.FadeOutMs > 0)
                 SetClipFade(clipId, clipModel.FadeInMs, clipModel.FadeOutMs);
+            if (clipModel.TransitionType != TransitionType.None)
+                SetClipTransition(clipId, clipModel.TransitionType);
         }
 
         // 7) Markers 복원 (ViewModel만)
@@ -546,6 +573,7 @@ public class ProjectService : IDisposable
             Speed = clip.Speed,
             FadeInMs = clip.FadeInMs,
             FadeOutMs = clip.FadeOutMs,
+            TransitionType = clip.TransitionType,
             OpacityKeyframes = KeyframeSystemToDto(clip.OpacityKeyframes),
             VolumeKeyframes = KeyframeSystemToDto(clip.VolumeKeyframes),
             PositionXKeyframes = KeyframeSystemToDto(clip.PositionXKeyframes),
@@ -578,7 +606,8 @@ public class ProjectService : IDisposable
             Volume = data.Volume,
             Speed = data.Speed,
             FadeInMs = data.FadeInMs,
-            FadeOutMs = data.FadeOutMs
+            FadeOutMs = data.FadeOutMs,
+            TransitionType = data.TransitionType
         };
 
         ApplyKeyframeSystemData(data.OpacityKeyframes, clip.OpacityKeyframes);

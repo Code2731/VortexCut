@@ -149,6 +149,13 @@ public static class NativeMethods
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int timeline_set_clip_fade(IntPtr timeline, ulong clipId, long fadeInMs, long fadeOutMs);
 
+    /// <summary>
+    /// 클립 트랜지션 타입 설정 (비디오 트랙 only)
+    /// transitionType: 0=None, 1=Crossfade, 2=FadeBlack, 3=WipeLeft, 4=WipeRight, 5=WipeUp, 6=WipeDown
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int timeline_set_clip_transition(IntPtr timeline, ulong clipId, uint transitionType);
+
     // ==================== Video Info Functions ====================
 
     /// <summary>

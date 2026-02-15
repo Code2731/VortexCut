@@ -149,6 +149,51 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- Transition Tab — 비디오 트랜지션 타입 설정 -->
+            <TabItem Header="Transition">
+                <Panel>
+                    <ScrollViewer IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Margin="12" Spacing="12">
+                            <TextBlock Text="Video Transition" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                            <TextBlock Text="겹치는 클립 구간에서 적용됩니다."
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"/>
+
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Transition Type" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                <ComboBox x:Name="TransitionTypeComboBox" HorizontalAlignment="Stretch" SelectedIndex="0">
+                                    <ComboBoxItem Content="None"/>
+                                    <ComboBoxItem Content="Crossfade"/>
+                                    <ComboBoxItem Content="Fade through Black"/>
+                                    <ComboBoxItem Content="Wipe Left"/>
+                                    <ComboBoxItem Content="Wipe Right"/>
+                                    <ComboBoxItem Content="Wipe Up"/>
+                                    <ComboBoxItem Content="Wipe Down"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                            <Button x:Name="ResetTransitionButton"
+                                    Content="Reset"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    FontSize="11"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <TextBlock
+                        IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNull}}"
+                        Text="클립을 선택하세요"
+                        Foreground="{StaticResource TextSecondaryBrush}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontSize="13"/>
+                </Panel>
+            </TabItem>
+
             <!-- Color Grade Tab -->
             <TabItem Header="Color">
                 <Panel>

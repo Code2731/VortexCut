@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using VortexCut.Core.Interfaces;
 using VortexCut.Core.Models;
 using VortexCut.Core.Services;
 using VortexCut.UI.Services;
@@ -25,7 +26,7 @@ public enum KeyframeSystemType
 /// </summary>
 public partial class TimelineViewModel : ViewModelBase
 {
-    private readonly ProjectService _projectService;
+    private readonly IProjectService _projectService;
     private readonly UndoRedoService _undoRedoService;
     private ulong _nextTrackId = 1;
 
@@ -112,14 +113,14 @@ public partial class TimelineViewModel : ViewModelBase
     public RippleEditService? RippleEditService { get; private set; }
     public LinkClipService? LinkClipService { get; private set; }
     public UndoRedoService UndoRedo => _undoRedoService;
-    public ProjectService ProjectServiceRef => _projectService;
+    public IProjectService ProjectServiceRef => _projectService;
 
     /// <summary>
     /// 재생 중지 요청 콜백 (MainViewModel에서 설정)
     /// </summary>
     public Action? RequestStopPlayback { get; set; }
 
-    public TimelineViewModel(ProjectService projectService)
+    public TimelineViewModel(IProjectService projectService)
     {
         _projectService = projectService;
         _undoRedoService = new UndoRedoService();
@@ -168,7 +169,7 @@ public partial class TimelineViewModel : ViewModelBase
         await Task.Run(() =>
         {
             // Rust FFI로 실제 비디오 정보 조회
-            var videoInfo = VortexCut.Interop.Services.RenderService.GetVideoInfo(filePath);
+            var videoInfo = _projectService.GetVideoInfo(filePath);
             long durationMs = videoInfo.DurationMs;
             System.Diagnostics.Debug.WriteLine($"   📋 VideoInfo: duration={durationMs}ms, {videoInfo.Width}x{videoInfo.Height}, fps={videoInfo.Fps:F2}");
 

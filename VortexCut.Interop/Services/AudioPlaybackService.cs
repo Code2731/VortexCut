@@ -1,9 +1,11 @@
+using VortexCut.Core.Interfaces;
+
 namespace VortexCut.Interop.Services;
 
 /// <summary>
 /// 실시간 오디오 재생 서비스 (Rust cpal 엔진 P/Invoke 래퍼)
 /// </summary>
-public class AudioPlaybackService : IDisposable
+public class AudioPlaybackService : IAudioPlaybackService
 {
     private IntPtr _handle;
     private bool _disposed;

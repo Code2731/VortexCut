@@ -2,8 +2,11 @@
 // 아키텍처: FrameCache + DecodeResult 기반 안전 렌더링
 
 use crate::timeline::{Timeline, VideoClip};
+use crate::timeline::track::TransitionInfo;
 use crate::ffmpeg::{Decoder, DecodeResult};
 use crate::rendering::effects::{EffectParams, apply_effects};
+use crate::rendering::transitions::apply_transition;
+use crate::subtitle::overlay::{yuv420p_to_rgba, rgba_to_yuv420p};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
@@ -250,34 +253,124 @@ impl Renderer {
         }
     }
 
+    /// 단일 클립 디코딩 + 이펙트 적용 (RGBA 반환, 트랜지션 블렌딩 전처리용)
+    fn decode_and_render_clip(&mut self, clip: &VideoClip, source_time_ms: i64, timestamp_ms: i64) -> Option<RenderedFrame> {
+        let file_path = clip.file_path.to_string_lossy().to_string();
+
+        // 캐시 조회
+        if let Some(frame) = self.frame_cache.get(&file_path, source_time_ms).cloned() {
+            return Some(frame);
+        }
+
+        // 디코딩
+        let result = self.decode_clip_frame(clip, source_time_ms);
+        match result {
+            Ok(DecodeResult::Frame(frame)) | Ok(DecodeResult::EndOfStream(frame)) => {
+                let is_yuv = frame.format == crate::ffmpeg::PixelFormat::YUV420P;
+                let mut rendered = RenderedFrame {
+                    width: frame.width,
+                    height: frame.height,
+                    data: if is_yuv {
+                        yuv420p_to_rgba(&frame.data, frame.width, frame.height)
+                    } else {
+                        frame.data
+                    },
+                    timestamp_ms,
+                    is_yuv: false, // 항상 RGBA (블렌딩용)
+                };
+
+                // 이펙트 적용
+                if let Some(params) = self.clip_effects.get(&clip.id) {
+                    if !params.is_default() {
+                        apply_effects(&mut rendered.data, rendered.width, rendered.height, params);
+                    }
+                }
+
+                self.frame_cache.put(file_path, source_time_ms, rendered.clone());
+                Some(rendered)
+            }
+            _ => None,
+        }
+    }
+
     /// 특정 시간의 프레임 렌더링 (캐시 + DecodeResult 안전 처리)
     pub fn render_frame(&mut self, timestamp_ms: i64) -> Result<RenderedFrame, String> {
         self.diag_total += 1;
         let render_start = std::time::Instant::now();
 
         // Timeline 데이터 복사 (lock 최소화)
-        let clips_to_render = {
+        let (clips_to_render, transitions) = {
             let timeline = self.timeline.lock()
                 .map_err(|e| format!("Failed to lock timeline: {}", e))?;
 
             let mut clips = Vec::new();
+            let mut transitions: Vec<TransitionInfo> = Vec::new();
 
             for track in &timeline.video_tracks {
                 if !track.enabled {
                     continue;
                 }
 
-                if let Some(clip) = track.get_clip_at_time(timestamp_ms) {
+                // 트랜지션 먼저 확인 (겹치는 2클립)
+                if let Some(info) = track.get_transition_at_time(timestamp_ms) {
+                    transitions.push(info);
+                } else if let Some(clip) = track.get_clip_at_time(timestamp_ms) {
                     if let Some(source_time_ms) = clip.timeline_to_source_time(timestamp_ms) {
                         clips.push((clip.clone(), source_time_ms));
                     }
                 }
             }
 
-            clips
+            (clips, transitions)
         }; // timeline lock 해제
 
-        // 클립이 없으면 검은색 프레임 반환
+        // 클립도 트랜지션도 없으면 검은색 프레임
+        if clips_to_render.is_empty() && transitions.is_empty() {
+            self.diag_no_clip += 1;
+            self.print_diag_if_needed(timestamp_ms);
+            return Ok(match self.export_resolution {
+                Some((w, h)) => black_frame_yuv(w, h, timestamp_ms),
+                None => black_frame(timestamp_ms),
+            });
+        }
+
+        // 트랜지션 처리 (있으면 우선)
+        if !transitions.is_empty() {
+            let info = &transitions[0];
+            let out_src = info.outgoing.timeline_to_source_time(timestamp_ms);
+            let in_src = info.incoming.timeline_to_source_time(timestamp_ms);
+
+            if let (Some(out_src), Some(in_src)) = (out_src, in_src) {
+                let out_frame = self.decode_and_render_clip(&info.outgoing.clone(), out_src, timestamp_ms);
+                let in_frame = self.decode_and_render_clip(&info.incoming.clone(), in_src, timestamp_ms);
+
+                if let (Some(mut out_f), Some(in_f)) = (out_frame, in_frame) {
+                    // RGBA 블렌딩
+                    apply_transition(
+                        &mut out_f.data,
+                        &in_f.data,
+                        out_f.width,
+                        out_f.height,
+                        info.progress,
+                        info.transition_type,
+                    );
+
+                    // Export 시 YUV 변환
+                    if self.export_resolution.is_some() {
+                        let yuv = rgba_to_yuv420p(&out_f.data, out_f.width, out_f.height);
+                        out_f.data = yuv;
+                        out_f.is_yuv = true;
+                    }
+
+                    self.last_rendered_frame = Some(out_f.clone());
+                    self.diag_decoded += 1;
+                    self.print_diag_if_needed(timestamp_ms);
+                    return Ok(out_f);
+                }
+            }
+        }
+
+        // 단일 클립 렌더링 (기존 경로)
         if clips_to_render.is_empty() {
             self.diag_no_clip += 1;
             self.print_diag_if_needed(timestamp_ms);
@@ -287,7 +380,6 @@ impl Renderer {
             });
         }
 
-        // 첫 번째 클립 렌더링
         let (clip, source_time_ms) = &clips_to_render[0];
         let file_path = clip.file_path.to_string_lossy().to_string();
 

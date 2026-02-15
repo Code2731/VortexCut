@@ -7,7 +7,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VortexCut.Core.Models;
-using VortexCut.Interop;
+using VortexCut.Core.Interfaces;
 using VortexCut.Interop.Services;
 using VortexCut.UI.Services;
 
@@ -28,8 +28,8 @@ public record EncoderOption(string Name, uint EncoderType);
 /// </summary>
 public partial class ExportViewModel : ViewModelBase, IDisposable
 {
-    private readonly ProjectService _projectService;
-    private readonly ExportService _exportService;
+    private readonly IProjectService _projectService;
+    private readonly IExportService _exportService;
     private readonly System.Timers.Timer _progressTimer;
     private TimelineViewModel? _timelineViewModel;
 
@@ -102,7 +102,7 @@ public partial class ExportViewModel : ViewModelBase, IDisposable
         _timelineViewModel = timelineVm;
     }
 
-    public ExportViewModel(ProjectService projectService)
+    public ExportViewModel(IProjectService projectService)
     {
         _projectService = projectService;
         _exportService = new ExportService();
@@ -295,7 +295,7 @@ public partial class ExportViewModel : ViewModelBase, IDisposable
 
         if (subtitleClips.Count == 0) return IntPtr.Zero;
 
-        var listHandle = NativeMethods.exporter_create_subtitle_list();
+        var listHandle = _exportService.CreateSubtitleList();
         if (listHandle == IntPtr.Zero) return IntPtr.Zero;
 
         int videoWidth = (int)Width;
@@ -315,7 +315,7 @@ public partial class ExportViewModel : ViewModelBase, IDisposable
                 {
                     Marshal.Copy(bitmap.RgbaData, 0, rgbaPtr, bitmap.RgbaData.Length);
 
-                    NativeMethods.exporter_subtitle_list_add(
+                    _exportService.SubtitleListAdd(
                         listHandle,
                         clip.StartTimeMs,
                         clip.EndTimeMs,

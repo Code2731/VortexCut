@@ -6,7 +6,7 @@ use std::os::raw::c_char;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::timeline::Timeline;
+use crate::timeline::{Timeline, TransitionType};
 use super::types::{ERROR_SUCCESS, ERROR_NULL_PTR, ERROR_INVALID_PARAM};
 
 type TimelineArc = Arc<Mutex<Timeline>>;
@@ -467,6 +467,36 @@ pub extern "C" fn timeline_set_clip_fade(
             if let Some(clip) = track.clips.iter_mut().find(|c| c.id == clip_id) {
                 clip.fade_in_ms = fade_in_ms;
                 clip.fade_out_ms = fade_out_ms;
+                return ERROR_SUCCESS;
+            }
+        }
+    }
+
+    ERROR_INVALID_PARAM
+}
+
+/// 클립 트랜지션 타입 설정 (비디오 트랙 only)
+/// transition_type: 0=None, 1=Crossfade, 2=FadeBlack, 3=WipeLeft, 4=WipeRight, 5=WipeUp, 6=WipeDown
+#[no_mangle]
+pub extern "C" fn timeline_set_clip_transition(
+    timeline: *mut std::ffi::c_void,
+    clip_id: u64,
+    transition_type: u32,
+) -> i32 {
+    if timeline.is_null() {
+        return ERROR_NULL_PTR;
+    }
+
+    unsafe {
+        let timeline_arc = &*(timeline as *const Mutex<Timeline>);
+        let mut timeline = match timeline_arc.lock() {
+            Ok(t) => t,
+            Err(_) => return ERROR_INVALID_PARAM,
+        };
+
+        for track in &mut timeline.video_tracks {
+            if let Some(clip) = track.get_clip_by_id_mut(clip_id) {
+                clip.transition_type = TransitionType::from_u32(transition_type);
                 return ERROR_SUCCESS;
             }
         }

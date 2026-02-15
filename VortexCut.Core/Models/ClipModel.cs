@@ -4,6 +4,20 @@ using System.ComponentModel.DataAnnotations;
 namespace VortexCut.Core.Models;
 
 /// <summary>
+/// 비디오 트랜지션 타입 (incoming 클립에 설정)
+/// </summary>
+public enum TransitionType
+{
+    None = 0,
+    Crossfade = 1,
+    FadeBlack = 2,
+    WipeLeft = 3,
+    WipeRight = 4,
+    WipeUp = 5,
+    WipeDown = 6
+}
+
+/// <summary>
 /// 타임라인 클립 모델
 /// </summary>
 public class ClipModel
@@ -97,6 +111,11 @@ public class ClipModel
     [Category("오디오")]
     [DisplayName("페이드 아웃 (ms)")]
     public long FadeOutMs { get; set; } = 0;
+
+    // 트랜지션 (Phase 11)
+    [Category("트랜지션")]
+    [DisplayName("트랜지션 타입")]
+    public TransitionType TransitionType { get; set; } = TransitionType.None;
 
     // 키프레임 시스템 (After Effects 스타일) — 별도 키프레임 에디터에서 편집
     [Browsable(false)]

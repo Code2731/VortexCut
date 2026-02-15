@@ -1,13 +1,10 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
+using VortexCut.Core.Interfaces;
+using VortexCut.Core.Models;
 using VortexCut.Interop.Types;
 
 namespace VortexCut.Interop.Services;
-
-/// <summary>
-/// 비디오 파일 메타데이터
-/// </summary>
-public record VideoInfo(long DurationMs, uint Width, uint Height, double Fps);
 
 /// <summary>
 /// 썸네일 세션 SafeHandle - 디코더를 한 번 열고 여러 프레임 생성
@@ -146,7 +143,7 @@ public class RendererHandle : SafeHandle
 /// <summary>
 /// 렌더링된 프레임 데이터
 /// </summary>
-public class RenderedFrame : IDisposable
+public class RenderedFrame : IRenderedFrame
 {
     /// <summary>
     /// 최대 허용 프레임 크기 (16K 해상도: 15360 x 8640 x 4 bytes = ~530MB)
@@ -218,10 +215,33 @@ public class RenderedFrame : IDisposable
 /// <summary>
 /// 렌더링 서비스
 /// </summary>
-public class RenderService : IDisposable
+public class RenderService : IRenderService
 {
     private RendererHandle? _renderer;
     private bool _disposed;
+
+    /// <summary>
+    /// Renderer 생성 (IntPtr 오버로드 — IRenderService 인터페이스 구현)
+    /// </summary>
+    public void CreateRenderer(IntPtr timelineHandle)
+    {
+        ThrowIfDisposed();
+
+        if (_renderer != null && !_renderer.IsInvalid)
+        {
+            throw new InvalidOperationException("Renderer already exists. Call DestroyRenderer() first.");
+        }
+
+        if (timelineHandle == IntPtr.Zero)
+        {
+            throw new ArgumentException("Invalid timeline handle");
+        }
+
+        int result = NativeMethods.renderer_create(timelineHandle, out IntPtr rendererPtr);
+        CheckError(result);
+
+        _renderer = new RendererHandle(rendererPtr);
+    }
 
     /// <summary>
     /// Renderer 생성 (기존 렌더러는 수동으로 먼저 해제해야 함)
@@ -443,6 +463,26 @@ public class RenderService : IDisposable
         NativeMethods.renderer_get_cache_stats(rendererPtr, out uint frames, out nuint bytes);
         return (frames, bytes);
     }
+
+    // === IRenderService instance wrappers (static 메서드 위임) ===
+
+    /// <summary>
+    /// 비디오 파일 정보 조회 (instance wrapper → static)
+    /// </summary>
+    VideoInfo IRenderService.GetVideoInfo(string filePath) => GetVideoInfo(filePath);
+
+    /// <summary>
+    /// 비디오 썸네일 생성 (instance wrapper → static)
+    /// </summary>
+    IRenderedFrame IRenderService.GenerateThumbnail(string filePath, long timestampMs, uint thumbWidth, uint thumbHeight)
+        => GenerateThumbnail(filePath, timestampMs, thumbWidth, thumbHeight);
+
+    // === IRenderService RenderFrame wrapper ===
+
+    /// <summary>
+    /// 프레임 렌더링 (IRenderedFrame 반환 — IRenderService 인터페이스 구현)
+    /// </summary>
+    IRenderedFrame? IRenderService.RenderFrame(long timestampMs) => RenderFrame(timestampMs);
 
     private void ThrowIfDisposed()
     {

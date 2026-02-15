@@ -14,10 +14,17 @@ public partial class MainWindow : Window
     private MainViewModel? _viewModel;
     private readonly ToastService _toastService = new();
 
+    /// <summary>
+    /// XAML 런타임 로더용 (디자이너/프리뷰어에서 사용)
+    /// </summary>
     public MainWindow()
     {
         InitializeComponent();
-        _viewModel = new MainViewModel();
+    }
+
+    public MainWindow(MainViewModel viewModel) : this()
+    {
+        _viewModel = viewModel;
         DataContext = _viewModel;
 
         // 키보드 단축키

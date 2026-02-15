@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using VortexCut.Core.Models;
 using VortexCut.UI.ViewModels;
 
 namespace VortexCut.UI.Views;
@@ -16,6 +17,9 @@ public partial class InspectorView : UserControl
     private TextBlock? _contrastValueText;
     private TextBlock? _saturationValueText;
     private TextBlock? _temperatureValueText;
+
+    // Transition 탭
+    private ComboBox? _transitionTypeComboBox;
 
     // Audio 탭 슬라이더
     private Slider? _volumeSlider;
@@ -40,7 +44,11 @@ public partial class InspectorView : UserControl
         base.OnLoaded(e);
         SetupColorSliders();
         SetupAudioSliders();
+        SetupTransitionControls();
     }
+
+    private InspectorViewModel? GetInspectorVm() => (DataContext as MainViewModel)?.Inspector;
+    private ClipModel? GetSelectedClip() => (DataContext as MainViewModel)?.Timeline.SelectedClip;
 
     // ==================== Color 탭 ====================
 
@@ -76,6 +84,7 @@ public partial class InspectorView : UserControl
         {
             SyncSlidersToClip();
             SyncAudioSlidersToClip();
+            SyncTransitionToClip();
         }
     }
 
@@ -84,8 +93,7 @@ public partial class InspectorView : UserControl
         _isUpdatingSliders = true;
         try
         {
-            var mainVm = DataContext as MainViewModel;
-            var clip = mainVm?.Timeline.SelectedClip;
+            var clip = GetSelectedClip();
 
             if (clip == null)
             {
@@ -132,47 +140,27 @@ public partial class InspectorView : UserControl
     {
         if (_isUpdatingSliders) return;
 
-        var mainVm = DataContext as MainViewModel;
-        var clip = mainVm?.Timeline.SelectedClip;
-        if (clip == null || mainVm == null) return;
+        var clip = GetSelectedClip();
+        var inspectorVm = GetInspectorVm();
+        if (clip == null || inspectorVm == null) return;
 
         double brightness = (_brightnessSlider?.Value ?? 0) / 100.0;
         double contrast = (_contrastSlider?.Value ?? 0) / 100.0;
         double saturation = (_saturationSlider?.Value ?? 0) / 100.0;
         double temperature = (_temperatureSlider?.Value ?? 0) / 100.0;
 
-        clip.Brightness = brightness;
-        clip.Contrast = contrast;
-        clip.Saturation = saturation;
-        clip.Temperature = temperature;
-
         UpdateColorValueTexts();
-
-        mainVm.ProjectService.SetClipEffects(
-            clip.Id,
-            (float)brightness,
-            (float)contrast,
-            (float)saturation,
-            (float)temperature);
-
-        mainVm.Preview.RenderFrameAsync(mainVm.Timeline.CurrentTimeMs);
+        inspectorVm.ApplyColorEffects(clip, brightness, contrast, saturation, temperature);
     }
 
     private void OnResetEffectsClick(object? sender, RoutedEventArgs e)
     {
-        var mainVm = DataContext as MainViewModel;
-        var clip = mainVm?.Timeline.SelectedClip;
-        if (clip == null || mainVm == null) return;
+        var clip = GetSelectedClip();
+        var inspectorVm = GetInspectorVm();
+        if (clip == null || inspectorVm == null) return;
 
-        clip.Brightness = 0;
-        clip.Contrast = 0;
-        clip.Saturation = 0;
-        clip.Temperature = 0;
-
+        inspectorVm.ResetColorEffects(clip);
         SyncSlidersToClip();
-
-        mainVm.ProjectService.SetClipEffects(clip.Id, 0, 0, 0, 0);
-        mainVm.Preview.RenderFrameAsync(mainVm.Timeline.CurrentTimeMs);
     }
 
     // ==================== Audio 탭 ====================
@@ -197,16 +185,12 @@ public partial class InspectorView : UserControl
         if (resetAudioButton != null) resetAudioButton.Click += OnResetAudioClick;
     }
 
-    /// <summary>
-    /// 선택된 클립의 오디오 값을 슬라이더에 동기화
-    /// </summary>
     private void SyncAudioSlidersToClip()
     {
         _isUpdatingSliders = true;
         try
         {
-            var mainVm = DataContext as MainViewModel;
-            var clip = mainVm?.Timeline.SelectedClip;
+            var clip = GetSelectedClip();
 
             if (clip == null)
             {
@@ -217,11 +201,8 @@ public partial class InspectorView : UserControl
             }
             else
             {
-                // Volume: 0.0~2.0 → 0~200
                 SetSliderValue(_volumeSlider, clip.Volume * 100.0);
-                // Speed: 0.25~4.0 → 25~400
                 SetSliderValue(_speedSlider, clip.Speed * 100.0);
-                // Fade: 직접 ms
                 SetSliderValue(_fadeInSlider, clip.FadeInMs);
                 SetSliderValue(_fadeOutSlider, clip.FadeOutMs);
             }
@@ -246,61 +227,83 @@ public partial class InspectorView : UserControl
             _fadeOutValueText.Text = $"{(int)_fadeOutSlider.Value}ms";
     }
 
-    /// <summary>
-    /// Audio 슬라이더 값 변경 → ClipModel + Rust FFI 전달
-    /// </summary>
     private void OnAudioSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         if (_isUpdatingSliders) return;
 
-        var mainVm = DataContext as MainViewModel;
-        var clip = mainVm?.Timeline.SelectedClip;
-        if (clip == null || mainVm == null) return;
+        var clip = GetSelectedClip();
+        var inspectorVm = GetInspectorVm();
+        if (clip == null || inspectorVm == null) return;
 
-        // 슬라이더 → ClipModel
-        double volume = (_volumeSlider?.Value ?? 100) / 100.0;   // 0~200 → 0.0~2.0
-        double speed = (_speedSlider?.Value ?? 100) / 100.0;      // 25~400 → 0.25~4.0
+        double volume = (_volumeSlider?.Value ?? 100) / 100.0;
+        double speed = (_speedSlider?.Value ?? 100) / 100.0;
         long fadeInMs = (long)(_fadeInSlider?.Value ?? 0);
         long fadeOutMs = (long)(_fadeOutSlider?.Value ?? 0);
 
-        clip.Volume = volume;
-        clip.Speed = speed;
-        clip.FadeInMs = fadeInMs;
-        clip.FadeOutMs = fadeOutMs;
-
         UpdateAudioValueTexts();
-
-        // Rust Timeline에 전달
-        mainVm.ProjectService.SetClipVolume(clip.Id, (float)volume);
-        mainVm.ProjectService.SetClipSpeed(clip.Id, speed);
-        mainVm.ProjectService.SetClipFade(clip.Id, fadeInMs, fadeOutMs);
-
-        // Speed 변경 시 프리뷰 프레임 캐시 무효화 + 갱신
-        mainVm.ProjectService.ClearRenderCache();
-        mainVm.Preview.RenderFrameAsync(mainVm.Timeline.CurrentTimeMs);
+        inspectorVm.ApplyAudioSettings(clip, volume, speed, fadeInMs, fadeOutMs);
     }
 
-    /// <summary>
-    /// Reset All 버튼 → 오디오 설정 기본값으로 초기화
-    /// </summary>
     private void OnResetAudioClick(object? sender, RoutedEventArgs e)
     {
-        var mainVm = DataContext as MainViewModel;
-        var clip = mainVm?.Timeline.SelectedClip;
-        if (clip == null || mainVm == null) return;
+        var clip = GetSelectedClip();
+        var inspectorVm = GetInspectorVm();
+        if (clip == null || inspectorVm == null) return;
 
-        clip.Volume = 1.0;
-        clip.Speed = 1.0;
-        clip.FadeInMs = 0;
-        clip.FadeOutMs = 0;
-
+        inspectorVm.ResetAudioSettings(clip);
         SyncAudioSlidersToClip();
+    }
 
-        mainVm.ProjectService.SetClipVolume(clip.Id, 1.0f);
-        mainVm.ProjectService.SetClipSpeed(clip.Id, 1.0);
-        mainVm.ProjectService.SetClipFade(clip.Id, 0, 0);
+    // ==================== Transition 탭 ====================
 
-        mainVm.ProjectService.ClearRenderCache();
-        mainVm.Preview.RenderFrameAsync(mainVm.Timeline.CurrentTimeMs);
+    private void SetupTransitionControls()
+    {
+        _transitionTypeComboBox = this.FindControl<ComboBox>("TransitionTypeComboBox");
+        if (_transitionTypeComboBox != null)
+            _transitionTypeComboBox.SelectionChanged += OnTransitionTypeChanged;
+
+        var resetTransitionButton = this.FindControl<Button>("ResetTransitionButton");
+        if (resetTransitionButton != null)
+            resetTransitionButton.Click += OnResetTransitionClick;
+    }
+
+    private void SyncTransitionToClip()
+    {
+        _isUpdatingSliders = true;
+        try
+        {
+            var clip = GetSelectedClip();
+
+            if (_transitionTypeComboBox != null)
+            {
+                _transitionTypeComboBox.SelectedIndex = clip != null ? (int)clip.TransitionType : 0;
+            }
+        }
+        finally
+        {
+            _isUpdatingSliders = false;
+        }
+    }
+
+    private void OnTransitionTypeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingSliders) return;
+
+        var clip = GetSelectedClip();
+        var inspectorVm = GetInspectorVm();
+        if (clip == null || inspectorVm == null || _transitionTypeComboBox == null) return;
+
+        var transitionType = (TransitionType)_transitionTypeComboBox.SelectedIndex;
+        inspectorVm.ApplyTransition(clip, transitionType);
+    }
+
+    private void OnResetTransitionClick(object? sender, RoutedEventArgs e)
+    {
+        var clip = GetSelectedClip();
+        var inspectorVm = GetInspectorVm();
+        if (clip == null || inspectorVm == null) return;
+
+        inspectorVm.ResetTransition(clip);
+        SyncTransitionToClip();
     }
 }

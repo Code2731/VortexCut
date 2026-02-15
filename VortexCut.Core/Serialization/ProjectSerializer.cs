@@ -186,6 +186,10 @@ public class ClipData
     [JsonPropertyName("fadeOutMs")]
     public long FadeOutMs { get; set; }
 
+    // 트랜지션
+    [JsonPropertyName("transitionType")]
+    public TransitionType TransitionType { get; set; } = TransitionType.None;
+
     [JsonPropertyName("opacityKeyframes")]
     public KeyframeSystemData OpacityKeyframes { get; set; } = new();
 

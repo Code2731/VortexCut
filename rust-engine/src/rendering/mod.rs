@@ -2,5 +2,6 @@
 
 pub mod renderer;
 pub mod effects;
+pub mod transitions;
 
 pub use renderer::{Renderer, RenderedFrame};

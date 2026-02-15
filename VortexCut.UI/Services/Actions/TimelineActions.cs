@@ -184,7 +184,7 @@ public class MoveKeyframeAction : IUndoableAction
 public class RazorSplitAction : IUndoableAction
 {
     private readonly ObservableCollection<ClipModel> _clips;
-    private readonly ProjectService _projectService;
+    private readonly IProjectService _projectService;
     private readonly ClipModel _originalClip;
     private readonly long _cutTimeMs;
 
@@ -198,7 +198,7 @@ public class RazorSplitAction : IUndoableAction
 
     public RazorSplitAction(
         ObservableCollection<ClipModel> clips,
-        ProjectService projectService,
+        IProjectService projectService,
         ClipModel originalClip,
         long cutTimeMs)
     {
@@ -268,7 +268,7 @@ public class RazorSplitAction : IUndoableAction
 public class RippleDeleteAction : IUndoableAction
 {
     private readonly ObservableCollection<ClipModel> _clips;
-    private readonly ProjectService? _projectService;
+    private readonly IProjectService? _projectService;
     private readonly ClipModel _deletedClip;
     private readonly long _deletedDuration;
     private readonly int _trackIndex;
@@ -279,7 +279,7 @@ public class RippleDeleteAction : IUndoableAction
     public RippleDeleteAction(
         ObservableCollection<ClipModel> clips,
         ClipModel clip,
-        ProjectService? projectService = null)
+        IProjectService? projectService = null)
     {
         _clips = clips;
         _projectService = projectService;

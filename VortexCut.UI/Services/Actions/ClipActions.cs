@@ -10,7 +10,7 @@ namespace VortexCut.UI.Services.Actions;
 public class AddClipAction : IUndoableAction
 {
     private readonly ObservableCollection<ClipModel> _clips;
-    private readonly ProjectService _projectService;
+    private readonly IProjectService _projectService;
     private readonly string _filePath;
     private readonly long _startTimeMs;
     private readonly long _durationMs;
@@ -22,7 +22,7 @@ public class AddClipAction : IUndoableAction
 
     public AddClipAction(
         ObservableCollection<ClipModel> clips,
-        ProjectService projectService,
+        IProjectService projectService,
         string filePath,
         long startTimeMs,
         long durationMs,
@@ -60,7 +60,7 @@ public class AddClipAction : IUndoableAction
 public class DeleteClipAction : IUndoableAction
 {
     private readonly ObservableCollection<ClipModel> _clips;
-    private readonly ProjectService _projectService;
+    private readonly IProjectService _projectService;
     private readonly ClipModel _clip;
 
     // 스냅샷 데이터 (복원용)
@@ -78,7 +78,7 @@ public class DeleteClipAction : IUndoableAction
 
     public DeleteClipAction(
         ObservableCollection<ClipModel> clips,
-        ProjectService projectService,
+        IProjectService projectService,
         ClipModel clip)
     {
         _clips = clips;
@@ -130,7 +130,7 @@ public class DeleteClipAction : IUndoableAction
 public class MoveClipAction : IUndoableAction
 {
     private readonly ClipModel _clip;
-    private readonly ProjectService? _projectService;
+    private readonly IProjectService? _projectService;
     private readonly long _oldStartTimeMs;
     private readonly int _oldTrackIndex;
     private readonly long _newStartTimeMs;
@@ -142,7 +142,7 @@ public class MoveClipAction : IUndoableAction
         ClipModel clip,
         long oldStartTimeMs, int oldTrackIndex,
         long newStartTimeMs, int newTrackIndex,
-        ProjectService? projectService = null)
+        IProjectService? projectService = null)
     {
         _clip = clip;
         _oldStartTimeMs = oldStartTimeMs;
@@ -174,7 +174,7 @@ public class MoveClipAction : IUndoableAction
 public class TrimClipAction : IUndoableAction
 {
     private readonly ClipModel _clip;
-    private readonly ProjectService? _projectService;
+    private readonly IProjectService? _projectService;
     private readonly long _oldStartTimeMs;
     private readonly long _oldDurationMs;
     private readonly long _newStartTimeMs;
@@ -186,7 +186,7 @@ public class TrimClipAction : IUndoableAction
         ClipModel clip,
         long oldStartTimeMs, long oldDurationMs,
         long newStartTimeMs, long newDurationMs,
-        ProjectService? projectService = null)
+        IProjectService? projectService = null)
     {
         _clip = clip;
         _oldStartTimeMs = oldStartTimeMs;

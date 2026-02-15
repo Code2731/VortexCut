@@ -2,8 +2,7 @@ using System.Timers;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using VortexCut.Interop.Services;
-using VortexCut.UI.Services;
+using VortexCut.Core.Interfaces;
 
 namespace VortexCut.UI.ViewModels;
 
@@ -12,8 +11,8 @@ namespace VortexCut.UI.ViewModels;
 /// </summary>
 public partial class PreviewViewModel : ViewModelBase, IDisposable
 {
-    private readonly ProjectService _projectService;
-    private readonly AudioPlaybackService _audioPlayback = new();
+    private readonly IProjectService _projectService;
+    private readonly IAudioPlaybackService _audioPlayback;
     private readonly System.Timers.Timer _playbackTimer;
 
     [ObservableProperty]
@@ -76,9 +75,10 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     /// </summary>
     public bool HasSubtitle => CurrentSubtitleText != null;
 
-    public PreviewViewModel(ProjectService projectService)
+    public PreviewViewModel(IProjectService projectService, IAudioPlaybackService audioPlayback)
     {
         _projectService = projectService;
+        _audioPlayback = audioPlayback;
 
         // 30fps 재생 타이머
         _playbackTimer = new System.Timers.Timer(1000.0 / 30.0);

@@ -10,6 +10,34 @@ pub enum ClipType {
     Image,
 }
 
+/// 트랜지션 타입 (incoming 클립에 설정)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum TransitionType {
+    None = 0,         // 트랜지션 없음 (기본값)
+    Crossfade = 1,    // 크로스페이드 (디졸브)
+    FadeBlack = 2,    // 페이드 스루 블랙
+    WipeLeft = 3,     // 와이프 좌→우
+    WipeRight = 4,    // 와이프 우→좌
+    WipeUp = 5,       // 와이프 하→상
+    WipeDown = 6,     // 와이프 상→하
+}
+
+impl TransitionType {
+    pub fn from_u32(value: u32) -> Self {
+        match value {
+            0 => Self::None,
+            1 => Self::Crossfade,
+            2 => Self::FadeBlack,
+            3 => Self::WipeLeft,
+            4 => Self::WipeRight,
+            5 => Self::WipeUp,
+            6 => Self::WipeDown,
+            _ => Self::Crossfade,
+        }
+    }
+}
+
 /// 비디오 클립
 #[derive(Debug, Clone)]
 pub struct VideoClip {
@@ -21,6 +49,7 @@ pub struct VideoClip {
     pub trim_end_ms: i64,       // 원본 파일에서 트림 끝
     pub volume: f32,            // 0.0~2.0, 기본 1.0 (비디오 파일 내 오디오 볼륨)
     pub speed: f64,             // 0.25~4.0, 기본 1.0
+    pub transition_type: TransitionType,  // incoming 클립 트랜지션 타입
 }
 
 impl VideoClip {
@@ -35,6 +64,7 @@ impl VideoClip {
             trim_end_ms: duration_ms,
             volume: 1.0,
             speed: 1.0,
+            transition_type: TransitionType::None,
         }
     }
 

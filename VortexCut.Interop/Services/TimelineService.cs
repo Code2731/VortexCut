@@ -288,6 +288,19 @@ public class TimelineService : IDisposable
         CheckError(result);
     }
 
+    /// <summary>
+    /// 클립 트랜지션 타입 설정 (비디오 트랙 only)
+    /// </summary>
+    public void SetClipTransition(ulong clipId, uint transitionType)
+    {
+        ThrowIfDisposed();
+        ThrowIfNoTimeline();
+
+        int result = NativeMethods.timeline_set_clip_transition(
+            _timeline!.DangerousGetHandle(), clipId, transitionType);
+        CheckError(result);
+    }
+
     private void ThrowIfDisposed()
     {
         if (_disposed)

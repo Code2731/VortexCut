@@ -43,19 +43,32 @@ VortexCut/
 │   │   ├── ffi/              # FFI 인터페이스
 │   │   ├── ffmpeg/           # FFmpeg 래퍼
 │   │   ├── timeline/         # 타임라인 엔진
-│   │   ├── rendering/        # 렌더링 파이프라인 (LRU 캐시 + 이펙트)
+│   │   ├── rendering/        # 렌더링 파이프라인 (LRU 캐시 + 이펙트 + 트랜지션)
 │   │   ├── encoding/         # Export (H.264+AAC 인코딩, 오디오 믹서)
 │   │   ├── audio/            # 실시간 오디오 재생 (cpal)
 │   │   └── subtitle/         # 자막 처리
 │   └── Cargo.toml
-├── VortexCut.Core/           # C# 공통 모델
+├── VortexCut.Core/           # C# 공통 모델 + 서비스 인터페이스
+│   ├── Models/               # ClipModel, VideoInfo, Project, ...
+│   └── Interfaces/           # IProjectService, IRenderService, IExportService, ...
 ├── VortexCut.Interop/        # Rust-C# P/Invoke 레이어
-├── VortexCut.UI/             # Avalonia UI
+│   └── Services/             # RenderService, ExportService, AudioPlaybackService (인터페이스 구현)
+├── VortexCut.UI/             # Avalonia UI (DI 컨테이너, MVVM)
+│   ├── ViewModels/           # MainViewModel (partial), PreviewViewModel, TimelineViewModel, ...
+│   ├── Views/                # MainWindow, InspectorView, ...
+│   ├── Controls/             # ClipCanvasPanel (partial, 7 파일), TimelineHeader, ...
+│   └── Services/             # ProjectService (IProjectService 구현), Actions (Undo/Redo)
 ├── VortexCut.Tests/          # C# 단위 테스트
 └── docs/
-    ├── TECHSPEC.md           # 기술 명세서
-    └── ARCHITECTURE.md       # 아키텍처 문서
+    └── TECHSPEC.md           # 기술 명세서
 ```
+
+### 아키텍처 원칙
+
+- **SOLID 원칙**: 서비스 인터페이스 분리 (IProjectService, IRenderService, IExportService, IAudioPlaybackService)
+- **DI 컨테이너**: Microsoft.Extensions.DependencyInjection — App.axaml.cs Composition Root
+- **partial class 분할**: 대형 클래스 SRP 적용 (ClipCanvasPanel 7파일, MainViewModel 3파일)
+- **계층 분리**: Core(모델+인터페이스) → Interop(FFI 구현) → UI(ViewModel+View)
 
 ## 빌드 방법
 
@@ -147,6 +160,15 @@ dotnet test VortexCut.Tests
 
 ## 현재 상태
 
+### ✅ Phase 10 완료 (2026-02-15) - 아키텍처 리팩토링 (SOLID + DI)
+
+- [x] **ClipCanvasPanel partial class 분할** - 2,541줄 God Object → 7개 파일 (Rendering, Input, DragDrop 등)
+- [x] **서비스 인터페이스 추출** - IProjectService, IRenderService, IExportService, IAudioPlaybackService, IRenderedFrame
+- [x] **DI 컨테이너** - Microsoft.Extensions.DependencyInjection, App.axaml.cs Composition Root
+- [x] **InspectorView 분리** - 383줄 code-behind → InspectorViewModel 비즈니스 로직 분리
+- [x] **MainViewModel 분할** - 630줄 → 3개 partial class (Core, FileOperations, ClipOperations)
+- [x] **계층 의존성 정리** - ViewModel에서 Interop 직접 참조 제거, Core 인터페이스만 의존
+
 ### ✅ Phase 9 완료 (2026-02-15) - GPU 하드웨어 가속 인코딩
 
 - [x] **NVENC/QSV/AMF 자동 탐지** - `exporter_detect_encoders()` 비트마스크
@@ -192,13 +214,12 @@ dotnet test VortexCut.Tests
 ### 📋 계획
 - [ ] 트랜지션 시스템 (Crossfade/Dissolve/Wipe)
 - [ ] 키프레임 애니메이션
-- [ ] 오디오 이펙트 (볼륨/페이드)
-- [ ] 속도 조절 (Slow-mo/배속)
+- [ ] C# 유닛 테스트
+- [ ] 플러그인 시스템
 
 ## 문서
 
 - [TECHSPEC.md](docs/TECHSPEC.md) - 기술 명세서
-- [CLAUDE.md](CLAUDE.md) - Claude 사용 가이드
 
 ## 기여 방법
 
