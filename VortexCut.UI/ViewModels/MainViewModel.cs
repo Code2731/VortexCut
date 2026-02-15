@@ -1,6 +1,7 @@
 using System;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using VortexCut.Core.Interfaces;
 using VortexCut.UI.Services;
 
@@ -44,9 +45,21 @@ public partial class MainViewModel : ViewModelBase
     private string _projectName = "Untitled Project";
 
     /// <summary>
+    /// 활성 워크스페이스 ("Editing", "Color", "Audio", "Effects")
+    /// </summary>
+    [ObservableProperty]
+    private string _activeWorkspace = "Editing";
+
+    /// <summary>
     /// Inspector 패널 ViewModel (색보정, 오디오, 트랜지션 비즈니스 로직)
     /// </summary>
     public InspectorViewModel Inspector { get; }
+
+    [RelayCommand]
+    private void SetWorkspace(string workspace)
+    {
+        ActiveWorkspace = workspace;
+    }
 
     public MainViewModel(ProjectService projectService, IAudioPlaybackService audioPlayback)
     {

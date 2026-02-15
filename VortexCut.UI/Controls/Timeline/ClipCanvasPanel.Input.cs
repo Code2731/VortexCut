@@ -106,6 +106,11 @@ public partial class ClipCanvasPanel
                         _viewModel.SelectedClips.Add(_selectedClip);
                     }
 
+                    // Ctrl+클릭: 마지막 선택/해제된 클립 또는 첫 번째 선택된 클립
+                    _viewModel.SelectedClip = _viewModel.SelectedClips.Count > 0
+                        ? _viewModel.SelectedClips[^1]
+                        : null;
+
                     InvalidateVisual();
                     e.Handled = true;
                     return;
@@ -116,6 +121,7 @@ public partial class ClipCanvasPanel
                 {
                     _viewModel.SelectedClips.Clear();
                     _viewModel.SelectedClips.Add(_selectedClip);
+                    _viewModel.SelectedClip = _selectedClip;
                 }
 
                 // Lock된 트랙의 클립은 드래그/트림 차단
@@ -158,6 +164,7 @@ public partial class ClipCanvasPanel
                 if (_viewModel != null)
                 {
                     _viewModel.SelectedClips.Clear();
+                    _viewModel.SelectedClip = null;
                     long clickedTimeMs = XToTime(point.X);
                     _viewModel.CurrentTimeMs = Math.Max(0, clickedTimeMs);
                 }

@@ -75,6 +75,16 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     /// </summary>
     public bool HasSubtitle => CurrentSubtitleText != null;
 
+    /// <summary>
+    /// 자막 텍스트/스타일 변경 시 오버레이 강제 갱신
+    /// (CurrentTimeMs가 변하지 않아도 프리뷰 자막 표시 업데이트)
+    /// </summary>
+    public void RefreshSubtitleOverlay()
+    {
+        OnPropertyChanged(nameof(CurrentSubtitleText));
+        OnPropertyChanged(nameof(HasSubtitle));
+    }
+
     public PreviewViewModel(IProjectService projectService, IAudioPlaybackService audioPlayback)
     {
         _projectService = projectService;

@@ -74,10 +74,14 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
                 <Border Background="{StaticResource BgDarkBrush}" CornerRadius="4" Padding="2">
                     <StackPanel Orientation="Horizontal" Spacing="0">
-                        <Button Classes="ToolButton" Content="Editing" Padding="12,6" CornerRadius="3" Background="{StaticResource AccentBrush}" Foreground="{StaticResource TextBrightBrush}" FontSize="11" FontWeight="SemiBold"/>
-                        <Button Classes="ToolButton" Content="Color" Padding="12,6" CornerRadius="3" FontSize="11"/>
-                        <Button Classes="ToolButton" Content="Audio" Padding="12,6" CornerRadius="3" FontSize="11"/>
-                        <Button Classes="ToolButton" Content="Effects" Padding="12,6" CornerRadius="3" FontSize="11"/>
+                        <Button x:Name="WorkspaceEditingBtn" Classes="ToolButton" Content="Editing" Padding="12,6" CornerRadius="3" Background="{StaticResource AccentBrush}" Foreground="{StaticResource TextBrightBrush}" FontSize="11" FontWeight="SemiBold"
+                                Command="{Binding SetWorkspaceCommand}" CommandParameter="Editing"/>
+                        <Button x:Name="WorkspaceColorBtn" Classes="ToolButton" Content="Color" Padding="12,6" CornerRadius="3" FontSize="11"
+                                Command="{Binding SetWorkspaceCommand}" CommandParameter="Color"/>
+                        <Button x:Name="WorkspaceAudioBtn" Classes="ToolButton" Content="Audio" Padding="12,6" CornerRadius="3" FontSize="11"
+                                Command="{Binding SetWorkspaceCommand}" CommandParameter="Audio"/>
+                        <Button x:Name="WorkspaceEffectsBtn" Classes="ToolButton" Content="Effects" Padding="12,6" CornerRadius="3" FontSize="11"
+                                Command="{Binding SetWorkspaceCommand}" CommandParameter="Effects"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

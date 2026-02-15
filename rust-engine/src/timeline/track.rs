@@ -18,6 +18,7 @@ pub struct VideoTrack {
     pub index: usize,  // 트랙 순서 (0 = 최하단)
     pub clips: Vec<VideoClip>,
     pub enabled: bool,
+    pub muted: bool,
 }
 
 impl VideoTrack {
@@ -28,6 +29,7 @@ impl VideoTrack {
             index,
             clips: Vec::new(),
             enabled: true,
+            muted: false,
         }
     }
 
@@ -49,7 +51,7 @@ impl VideoTrack {
 
     /// 특정 시간에 활성화된 클립 찾기
     pub fn get_clip_at_time(&self, time_ms: i64) -> Option<&VideoClip> {
-        if !self.enabled {
+        if !self.enabled || self.muted {
             return None;
         }
 

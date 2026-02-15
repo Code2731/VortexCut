@@ -301,6 +301,19 @@ public class TimelineService : IDisposable
         CheckError(result);
     }
 
+    /// <summary>
+    /// 트랙 뮤트 설정
+    /// </summary>
+    public void SetTrackMuted(ulong trackId, bool muted)
+    {
+        ThrowIfDisposed();
+        ThrowIfNoTimeline();
+
+        int result = NativeMethods.timeline_set_track_muted(
+            _timeline!.DangerousGetHandle(), trackId, muted ? 1 : 0);
+        CheckError(result);
+    }
+
     private void ThrowIfDisposed()
     {
         if (_disposed)

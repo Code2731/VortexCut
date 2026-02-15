@@ -126,6 +126,19 @@ impl Timeline {
         video_max.max(audio_max)
     }
 
+    /// 트랙 뮤트 설정 (비디오 트랙 + 오디오 트랙 모두 검색)
+    pub fn set_track_muted(&mut self, track_id: u64, muted: bool) -> bool {
+        if let Some(track) = self.video_tracks.iter_mut().find(|t| t.id == track_id) {
+            track.muted = muted;
+            return true;
+        }
+        if let Some(track) = self.audio_tracks.iter_mut().find(|t| t.id == track_id) {
+            track.muted = muted;
+            return true;
+        }
+        false
+    }
+
     /// 특정 시간에 활성화된 비디오 클립들 찾기 (모든 트랙)
     pub fn get_video_clips_at_time(&self, time_ms: i64) -> Vec<(&VideoTrack, &VideoClip)> {
         let mut clips = Vec::new();

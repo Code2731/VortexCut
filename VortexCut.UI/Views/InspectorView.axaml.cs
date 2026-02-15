@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
@@ -8,7 +9,14 @@ namespace VortexCut.UI.Views;
 
 public partial class InspectorView : UserControl
 {
-    // Color 탭 슬라이더
+    // 워크스페이스 패널
+    private Panel? _propertiesPanel;
+    private Panel? _colorPanel;
+    private Panel? _audioPanel;
+    private Panel? _effectsPanel;
+    private TextBlock? _workspaceTitle;
+
+    // Color 슬라이더
     private Slider? _brightnessSlider;
     private Slider? _contrastSlider;
     private Slider? _saturationSlider;
@@ -18,10 +26,7 @@ public partial class InspectorView : UserControl
     private TextBlock? _saturationValueText;
     private TextBlock? _temperatureValueText;
 
-    // Transition 탭
-    private ComboBox? _transitionTypeComboBox;
-
-    // Audio 탭 슬라이더
+    // Audio 슬라이더
     private Slider? _volumeSlider;
     private Slider? _speedSlider;
     private Slider? _fadeInSlider;
@@ -31,7 +36,30 @@ public partial class InspectorView : UserControl
     private TextBlock? _fadeInValueText;
     private TextBlock? _fadeOutValueText;
 
-    // 프로그래밍적 슬라이더 값 설정 시 이벤트 무시용 플래그
+    // Transition
+    private ComboBox? _transitionTypeComboBox;
+
+    // Properties (Editing)
+    private TextBlock? _clipNameText;
+    private TextBlock? _clipPathText;
+    private Slider? _startTimeSlider;
+    private Slider? _durationSlider;
+    private Slider? _opacitySlider;
+    private TextBlock? _startTimeValueText;
+    private TextBlock? _durationValueText;
+    private TextBlock? _trackIndexValueText;
+    private TextBlock? _opacityValueText;
+
+    // Subtitle
+    private TextBox? _subtitleTextBox;
+    private Slider? _fontSizeSlider;
+    private TextBlock? _fontSizeValueText;
+    private ComboBox? _subtitlePositionComboBox;
+    private ToggleButton? _boldToggle;
+    private ToggleButton? _italicToggle;
+    private Panel? _subtitleEditPanel;
+
+    // 프로그래밍적 값 설정 시 이벤트 무시용 플래그
     private bool _isUpdatingSliders;
 
     public InspectorView()
@@ -42,15 +70,238 @@ public partial class InspectorView : UserControl
     protected override void OnLoaded(RoutedEventArgs e)
     {
         base.OnLoaded(e);
+        SetupWorkspacePanels();
+        SetupPropertiesControls();
         SetupColorSliders();
         SetupAudioSliders();
         SetupTransitionControls();
+        SetupSubtitleControls();
     }
 
     private InspectorViewModel? GetInspectorVm() => (DataContext as MainViewModel)?.Inspector;
     private ClipModel? GetSelectedClip() => (DataContext as MainViewModel)?.Timeline.SelectedClip;
 
-    // ==================== Color 탭 ====================
+    // ==================== 워크스페이스 전환 ====================
+
+    private void SetupWorkspacePanels()
+    {
+        _propertiesPanel = this.FindControl<Panel>("PropertiesPanel");
+        _colorPanel = this.FindControl<Panel>("ColorPanel");
+        _audioPanel = this.FindControl<Panel>("AudioPanel");
+        _effectsPanel = this.FindControl<Panel>("EffectsPanel");
+        _workspaceTitle = this.FindControl<TextBlock>("WorkspaceTitle");
+
+        if (DataContext is MainViewModel mainVm)
+        {
+            // 워크스페이스 변경 감지
+            mainVm.PropertyChanged += OnMainViewModelPropertyChanged;
+            // 클립 선택 변경 감지
+            mainVm.Timeline.PropertyChanged += OnTimelinePropertyChanged;
+        }
+    }
+
+    private void OnMainViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == "ActiveWorkspace")
+        {
+            UpdateWorkspacePanel();
+        }
+    }
+
+    private void UpdateWorkspacePanel()
+    {
+        var mainVm = DataContext as MainViewModel;
+        if (mainVm == null) return;
+
+        var workspace = mainVm.ActiveWorkspace;
+
+        if (_propertiesPanel != null) _propertiesPanel.IsVisible = workspace == "Editing";
+        if (_colorPanel != null) _colorPanel.IsVisible = workspace == "Color";
+        if (_audioPanel != null) _audioPanel.IsVisible = workspace == "Audio";
+        if (_effectsPanel != null) _effectsPanel.IsVisible = workspace == "Effects";
+
+        // 워크스페이스 전환 시 활성 패널 슬라이더 재동기화
+        switch (workspace)
+        {
+            case "Editing": SyncPropertiesToClip(); break;
+            case "Color": SyncSlidersToClip(); break;
+            case "Audio": SyncAudioSlidersToClip(); break;
+            case "Effects": SyncTransitionToClip(); SyncSubtitleToClip(); break;
+        }
+
+        if (_workspaceTitle != null)
+        {
+            _workspaceTitle.Text = workspace switch
+            {
+                "Editing" => "PROPERTIES",
+                "Color" => "COLOR",
+                "Audio" => "AUDIO",
+                "Effects" => "EFFECTS",
+                _ => workspace.ToUpper()
+            };
+        }
+    }
+
+    private void OnTimelinePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == "SelectedClip")
+        {
+            SyncPropertiesToClip();
+            SyncSlidersToClip();
+            SyncAudioSlidersToClip();
+            SyncTransitionToClip();
+            SyncSubtitleToClip();
+
+            // 자막 클립 선택 시 → Effects 워크스페이스로 자동 전환
+            var clip = GetSelectedClip();
+            if (clip is SubtitleClipModel && DataContext is MainViewModel mainVm)
+            {
+                mainVm.ActiveWorkspace = "Effects";
+            }
+        }
+    }
+
+    // ==================== Properties (Editing) ====================
+
+    private void SetupPropertiesControls()
+    {
+        _clipNameText = this.FindControl<TextBlock>("ClipNameText");
+        _clipPathText = this.FindControl<TextBlock>("ClipPathText");
+        _startTimeSlider = this.FindControl<Slider>("StartTimeSlider");
+        _durationSlider = this.FindControl<Slider>("DurationSlider");
+        _opacitySlider = this.FindControl<Slider>("OpacitySlider");
+        _startTimeValueText = this.FindControl<TextBlock>("StartTimeValueText");
+        _durationValueText = this.FindControl<TextBlock>("DurationValueText");
+        _trackIndexValueText = this.FindControl<TextBlock>("TrackIndexValueText");
+        _opacityValueText = this.FindControl<TextBlock>("OpacityValueText");
+
+        if (_startTimeSlider != null) _startTimeSlider.ValueChanged += OnPropertiesSliderChanged;
+        if (_durationSlider != null) _durationSlider.ValueChanged += OnPropertiesSliderChanged;
+        if (_opacitySlider != null) _opacitySlider.ValueChanged += OnPropertiesSliderChanged;
+
+        var resetPropertiesButton = this.FindControl<Button>("ResetPropertiesButton");
+        if (resetPropertiesButton != null) resetPropertiesButton.Click += OnResetPropertiesClick;
+    }
+
+    private void SyncPropertiesToClip()
+    {
+        _isUpdatingSliders = true;
+        try
+        {
+            var clip = GetSelectedClip();
+
+            if (clip == null)
+            {
+                if (_clipNameText != null) _clipNameText.Text = "-";
+                if (_clipPathText != null) _clipPathText.Text = "-";
+                SetSliderValue(_startTimeSlider, 0);
+                SetSliderValue(_durationSlider, 1000);
+                SetSliderValue(_opacitySlider, 100);
+                if (_trackIndexValueText != null) _trackIndexValueText.Text = "-";
+            }
+            else
+            {
+                if (_clipNameText != null)
+                    _clipNameText.Text = System.IO.Path.GetFileName(clip.FilePath);
+                if (_clipPathText != null)
+                    _clipPathText.Text = clip.FilePath;
+
+                // 슬라이더 범위를 클립에 맞게 조정
+                if (_startTimeSlider != null)
+                    _startTimeSlider.Maximum = Math.Max(600000, clip.StartTimeMs + clip.DurationMs * 2);
+                if (_durationSlider != null)
+                    _durationSlider.Maximum = Math.Max(600000, clip.DurationMs * 3);
+
+                SetSliderValue(_startTimeSlider, clip.StartTimeMs);
+                SetSliderValue(_durationSlider, clip.DurationMs);
+
+                // Opacity: 키프레임 시스템에서 초기값 (기본 1.0 = 100%)
+                var opacity = clip.OpacityKeyframes.Keyframes.Count > 0
+                    ? clip.OpacityKeyframes.Keyframes[0].Value * 100.0
+                    : 100.0;
+                SetSliderValue(_opacitySlider, opacity);
+
+                if (_trackIndexValueText != null)
+                    _trackIndexValueText.Text = clip.TrackIndex < 10 ? $"V{clip.TrackIndex + 1}" : $"A{clip.TrackIndex - 9}";
+            }
+
+            UpdatePropertiesValueTexts();
+        }
+        finally
+        {
+            _isUpdatingSliders = false;
+        }
+    }
+
+    private void UpdatePropertiesValueTexts()
+    {
+        if (_startTimeValueText != null && _startTimeSlider != null)
+            _startTimeValueText.Text = FormatTimeMs((long)_startTimeSlider.Value);
+        if (_durationValueText != null && _durationSlider != null)
+            _durationValueText.Text = FormatTimeMs((long)_durationSlider.Value);
+        if (_opacityValueText != null && _opacitySlider != null)
+            _opacityValueText.Text = $"{(int)_opacitySlider.Value}%";
+    }
+
+    private static string FormatTimeMs(long ms)
+    {
+        var ts = TimeSpan.FromMilliseconds(ms);
+        return $"{(int)ts.TotalMinutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds:D3}";
+    }
+
+    private void OnPropertiesSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_isUpdatingSliders) return;
+
+        var clip = GetSelectedClip();
+        if (clip == null) return;
+
+        var mainVm = DataContext as MainViewModel;
+
+        if (sender == _startTimeSlider)
+        {
+            clip.StartTimeMs = (long)(_startTimeSlider?.Value ?? 0);
+            mainVm?.Timeline.ProjectServiceRef.SyncClipToRust(clip);
+        }
+        else if (sender == _durationSlider)
+        {
+            clip.DurationMs = (long)(_durationSlider?.Value ?? 1000);
+            mainVm?.Timeline.ProjectServiceRef.SyncClipToRust(clip);
+        }
+        else if (sender == _opacitySlider)
+        {
+            // Opacity 값을 키프레임 첫 번째 값으로 설정 (간이 편집)
+            var opacityValue = (_opacitySlider?.Value ?? 100) / 100.0;
+            if (clip.OpacityKeyframes.Keyframes.Count == 0)
+            {
+                clip.OpacityKeyframes.AddKeyframe(0, opacityValue);
+            }
+            else
+            {
+                var kf = clip.OpacityKeyframes.Keyframes[0];
+                clip.OpacityKeyframes.UpdateKeyframe(kf, kf.Time, opacityValue);
+            }
+        }
+
+        UpdatePropertiesValueTexts();
+    }
+
+    private void OnResetPropertiesClick(object? sender, RoutedEventArgs e)
+    {
+        var clip = GetSelectedClip();
+        if (clip == null) return;
+
+        SetSliderValue(_opacitySlider, 100);
+        if (clip.OpacityKeyframes.Keyframes.Count > 0)
+        {
+            var kf = clip.OpacityKeyframes.Keyframes[0];
+            clip.OpacityKeyframes.UpdateKeyframe(kf, kf.Time, 1.0);
+        }
+
+        UpdatePropertiesValueTexts();
+    }
+
+    // ==================== Color ====================
 
     private void SetupColorSliders()
     {
@@ -70,22 +321,6 @@ public partial class InspectorView : UserControl
 
         var resetButton = this.FindControl<Button>("ResetEffectsButton");
         if (resetButton != null) resetButton.Click += OnResetEffectsClick;
-
-        // SelectedClip 변경 감지 → 슬라이더 값 동기화
-        if (DataContext is MainViewModel mainVm)
-        {
-            mainVm.Timeline.PropertyChanged += OnTimelinePropertyChanged;
-        }
-    }
-
-    private void OnTimelinePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == "SelectedClip")
-        {
-            SyncSlidersToClip();
-            SyncAudioSlidersToClip();
-            SyncTransitionToClip();
-        }
     }
 
     private void SyncSlidersToClip()
@@ -163,7 +398,7 @@ public partial class InspectorView : UserControl
         SyncSlidersToClip();
     }
 
-    // ==================== Audio 탭 ====================
+    // ==================== Audio ====================
 
     private void SetupAudioSliders()
     {
@@ -254,7 +489,126 @@ public partial class InspectorView : UserControl
         SyncAudioSlidersToClip();
     }
 
-    // ==================== Transition 탭 ====================
+    // ==================== Subtitle ====================
+
+    private void SetupSubtitleControls()
+    {
+        _subtitleTextBox = this.FindControl<TextBox>("SubtitleTextBox");
+        _fontSizeSlider = this.FindControl<Slider>("FontSizeSlider");
+        _fontSizeValueText = this.FindControl<TextBlock>("FontSizeValueText");
+        _subtitlePositionComboBox = this.FindControl<ComboBox>("SubtitlePositionComboBox");
+        _boldToggle = this.FindControl<ToggleButton>("BoldToggle");
+        _italicToggle = this.FindControl<ToggleButton>("ItalicToggle");
+        _subtitleEditPanel = this.FindControl<Panel>("SubtitleEditPanel");
+
+        if (_subtitleTextBox != null) _subtitleTextBox.TextChanged += OnSubtitleTextChanged;
+        if (_fontSizeSlider != null) _fontSizeSlider.ValueChanged += OnSubtitleStyleChanged;
+        if (_subtitlePositionComboBox != null) _subtitlePositionComboBox.SelectionChanged += OnSubtitleStyleSelectionChanged;
+        if (_boldToggle != null) _boldToggle.IsCheckedChanged += OnSubtitleStyleToggleChanged;
+        if (_italicToggle != null) _italicToggle.IsCheckedChanged += OnSubtitleStyleToggleChanged;
+
+        var resetSubtitleButton = this.FindControl<Button>("ResetSubtitleButton");
+        if (resetSubtitleButton != null) resetSubtitleButton.Click += OnResetSubtitleClick;
+    }
+
+    private void SyncSubtitleToClip()
+    {
+        _isUpdatingSliders = true;
+        try
+        {
+            var subtitleClip = GetSelectedClip() as SubtitleClipModel;
+
+            // 자막 클립 여부에 따라 편집 패널 토글
+            if (_subtitleEditPanel != null)
+                _subtitleEditPanel.IsVisible = subtitleClip != null;
+
+            if (subtitleClip == null)
+            {
+                if (_subtitleTextBox != null) _subtitleTextBox.Text = "";
+                SetSliderValue(_fontSizeSlider, 48);
+                if (_subtitlePositionComboBox != null) _subtitlePositionComboBox.SelectedIndex = 2;
+                if (_boldToggle != null) _boldToggle.IsChecked = false;
+                if (_italicToggle != null) _italicToggle.IsChecked = false;
+            }
+            else
+            {
+                if (_subtitleTextBox != null) _subtitleTextBox.Text = subtitleClip.Text;
+                SetSliderValue(_fontSizeSlider, subtitleClip.Style.FontSize);
+                if (_subtitlePositionComboBox != null)
+                    _subtitlePositionComboBox.SelectedIndex = (int)subtitleClip.Style.Position;
+                if (_boldToggle != null) _boldToggle.IsChecked = subtitleClip.Style.IsBold;
+                if (_italicToggle != null) _italicToggle.IsChecked = subtitleClip.Style.IsItalic;
+            }
+
+            UpdateFontSizeValueText();
+        }
+        finally
+        {
+            _isUpdatingSliders = false;
+        }
+    }
+
+    private void UpdateFontSizeValueText()
+    {
+        if (_fontSizeValueText != null && _fontSizeSlider != null)
+            _fontSizeValueText.Text = ((int)_fontSizeSlider.Value).ToString();
+    }
+
+    private void OnSubtitleTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (_isUpdatingSliders) return;
+
+        var subtitleClip = GetSelectedClip() as SubtitleClipModel;
+        var inspectorVm = GetInspectorVm();
+        if (subtitleClip == null || inspectorVm == null || _subtitleTextBox == null) return;
+
+        inspectorVm.ApplySubtitleText(subtitleClip, _subtitleTextBox.Text ?? "");
+    }
+
+    private void OnSubtitleStyleChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_isUpdatingSliders) return;
+        ApplyCurrentSubtitleStyle();
+    }
+
+    private void OnSubtitleStyleSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingSliders) return;
+        ApplyCurrentSubtitleStyle();
+    }
+
+    private void OnSubtitleStyleToggleChanged(object? sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingSliders) return;
+        ApplyCurrentSubtitleStyle();
+    }
+
+    private void ApplyCurrentSubtitleStyle()
+    {
+        var subtitleClip = GetSelectedClip() as SubtitleClipModel;
+        var inspectorVm = GetInspectorVm();
+        if (subtitleClip == null || inspectorVm == null) return;
+
+        double fontSize = _fontSizeSlider?.Value ?? 48;
+        var position = (SubtitlePosition)(_subtitlePositionComboBox?.SelectedIndex ?? 2);
+        bool isBold = _boldToggle?.IsChecked ?? false;
+        bool isItalic = _italicToggle?.IsChecked ?? false;
+
+        UpdateFontSizeValueText();
+        inspectorVm.ApplySubtitleStyle(subtitleClip, fontSize, position, isBold, isItalic);
+    }
+
+    private void OnResetSubtitleClick(object? sender, RoutedEventArgs e)
+    {
+        var subtitleClip = GetSelectedClip() as SubtitleClipModel;
+        var inspectorVm = GetInspectorVm();
+        if (subtitleClip == null || inspectorVm == null) return;
+
+        inspectorVm.ResetSubtitleStyle(subtitleClip);
+        SyncSubtitleToClip();
+    }
+
+    // ==================== Transition ====================
 
     private void SetupTransitionControls()
     {

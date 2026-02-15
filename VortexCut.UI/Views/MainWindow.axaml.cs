@@ -2,6 +2,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Media;
 using VortexCut.Core.Models;
 using VortexCut.UI.ViewModels;
 using VortexCut.UI.Services;
@@ -13,6 +14,12 @@ public partial class MainWindow : Window
 {
     private MainViewModel? _viewModel;
     private readonly ToastService _toastService = new();
+
+    // 워크스페이스 버튼
+    private Button? _wsEditingBtn;
+    private Button? _wsColorBtn;
+    private Button? _wsAudioBtn;
+    private Button? _wsEffectsBtn;
 
     /// <summary>
     /// XAML 런타임 로더용 (디자이너/프리뷰어에서 사용)
@@ -51,8 +58,58 @@ public partial class MainWindow : Window
             // Export 다이얼로그 열기 콜백
             _viewModel.RequestOpenExportDialog = OpenExportDialog;
 
+            // 워크스페이스 버튼 초기화
+            SetupWorkspaceButtons();
+
             _viewModel.Initialize(); // 첫 프로젝트 생성
         };
+    }
+
+    private void SetupWorkspaceButtons()
+    {
+        _wsEditingBtn = this.FindControl<Button>("WorkspaceEditingBtn");
+        _wsColorBtn = this.FindControl<Button>("WorkspaceColorBtn");
+        _wsAudioBtn = this.FindControl<Button>("WorkspaceAudioBtn");
+        _wsEffectsBtn = this.FindControl<Button>("WorkspaceEffectsBtn");
+
+        if (_viewModel != null)
+        {
+            _viewModel.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == "ActiveWorkspace")
+                    UpdateWorkspaceButtonStyles();
+            };
+        }
+    }
+
+    private void UpdateWorkspaceButtonStyles()
+    {
+        if (_viewModel == null) return;
+
+        var accentBrush = this.FindResource("AccentBrush") as IBrush ?? Brushes.DodgerBlue;
+        var brightTextBrush = this.FindResource("TextBrightBrush") as IBrush ?? Brushes.White;
+        var active = _viewModel.ActiveWorkspace;
+
+        Button?[] buttons = { _wsEditingBtn, _wsColorBtn, _wsAudioBtn, _wsEffectsBtn };
+        string[] names = { "Editing", "Color", "Audio", "Effects" };
+
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            if (buttons[i] == null) continue;
+
+            if (names[i] == active)
+            {
+                buttons[i]!.Background = accentBrush;
+                buttons[i]!.Foreground = brightTextBrush;
+                buttons[i]!.FontWeight = FontWeight.SemiBold;
+            }
+            else
+            {
+                buttons[i]!.Background = Brushes.Transparent;
+                buttons[i]!.ClearValue(Button.ForegroundProperty);
+                buttons[i]!.FontWeight = FontWeight.Normal;
+            }
+        }
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)

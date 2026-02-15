@@ -11,6 +11,7 @@ public partial class ProjectBinView : UserControl
 {
     private Point _dragStartPoint;
     private bool _isDragging;
+    private bool _pointerDownOnItem;
 
     public ProjectBinView()
     {
@@ -34,12 +35,13 @@ public partial class ProjectBinView : UserControl
     /// </summary>
     private void OnMediaItemDoubleTapped(object? sender, TappedEventArgs e)
     {
+        // 드래그 중이면 무시
+        if (_isDragging) return;
+
         var listBox = sender as ListBox;
         if (listBox?.SelectedItem is not MediaItem mediaItem) return;
 
         // MainViewModel을 찾아서 LoadClipToSourceMonitor 호출
-        // ProjectBinView의 DataContext는 ProjectBinViewModel이므로
-        // 상위 트리에서 MainViewModel을 가져옴
         var mainWindow = TopLevel.GetTopLevel(this);
         if (mainWindow?.DataContext is MainViewModel mainVm)
         {
@@ -55,6 +57,7 @@ public partial class ProjectBinView : UserControl
         {
             _dragStartPoint = e.GetPosition(this);
             _isDragging = false;
+            _pointerDownOnItem = true;
         }
     }
 
@@ -62,26 +65,26 @@ public partial class ProjectBinView : UserControl
     {
         base.OnPointerMoved(e);
 
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && !_isDragging)
-        {
-            var currentPoint = e.GetPosition(this);
-            var diff = currentPoint - _dragStartPoint;
+        if (!_pointerDownOnItem || _isDragging) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
 
-            // 최소 드래그 거리 확인
-            if (Math.Abs(diff.X) > 5 || Math.Abs(diff.Y) > 5)
+        var currentPoint = e.GetPosition(this);
+        var diff = currentPoint - _dragStartPoint;
+
+        // 드래그 임계값: 15px (더블클릭 시 손 떨림으로 인한 오작동 방지)
+        if (Math.Abs(diff.X) > 15 || Math.Abs(diff.Y) > 15)
+        {
+            var listBox = this.FindControl<ListBox>("MediaListBox");
+            if (listBox?.SelectedItem is MediaItem mediaItem)
             {
-                // ListBox에서 선택된 항목 가져오기
-                var listBox = this.FindControl<ListBox>("MediaListBox");
-                if (listBox?.SelectedItem is MediaItem mediaItem)
-                {
-                    _isDragging = true;
+                _isDragging = true;
 #pragma warning disable CS0618 // DataObject/DoDragDrop deprecated in 11.3
-                    var dragData = new DataObject();
-                    dragData.Set("MediaItem", mediaItem);
-                    DragDrop.DoDragDrop(e, dragData, DragDropEffects.Copy);
+                var dragData = new DataObject();
+                dragData.Set("MediaItem", mediaItem);
+                DragDrop.DoDragDrop(e, dragData, DragDropEffects.Copy);
 #pragma warning restore CS0618
-                    _isDragging = false;
-                }
+                _isDragging = false;
+                _pointerDownOnItem = false;
             }
         }
     }
@@ -90,5 +93,6 @@ public partial class ProjectBinView : UserControl
     {
         base.OnPointerReleased(e);
         _isDragging = false;
+        _pointerDownOnItem = false;
     }
 }

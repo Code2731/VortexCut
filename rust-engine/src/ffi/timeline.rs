@@ -504,3 +504,30 @@ pub extern "C" fn timeline_set_clip_transition(
 
     ERROR_INVALID_PARAM
 }
+
+/// 트랙 뮤트 설정 (비디오 + 오디오 트랙 공용)
+/// muted: 0=unmute, 1=mute
+#[no_mangle]
+pub extern "C" fn timeline_set_track_muted(
+    timeline: *mut std::ffi::c_void,
+    track_id: u64,
+    muted: i32,
+) -> i32 {
+    if timeline.is_null() {
+        return ERROR_NULL_PTR;
+    }
+
+    unsafe {
+        let timeline_arc = &*(timeline as *const Mutex<Timeline>);
+        let mut tl = match timeline_arc.lock() {
+            Ok(t) => t,
+            Err(_) => return ERROR_INVALID_PARAM,
+        };
+
+        if tl.set_track_muted(track_id, muted != 0) {
+            ERROR_SUCCESS
+        } else {
+            ERROR_INVALID_PARAM
+        }
+    }
+}

@@ -156,6 +156,13 @@ public static class NativeMethods
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int timeline_set_clip_transition(IntPtr timeline, ulong clipId, uint transitionType);
 
+    /// <summary>
+    /// 트랙 뮤트 설정 (비디오 + 오디오 트랙 공용)
+    /// muted: 0=unmute, 1=mute
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int timeline_set_track_muted(IntPtr timeline, ulong trackId, int muted);
+
     // ==================== Video Info Functions ====================
 
     /// <summary>

@@ -112,11 +112,18 @@ public partial class MainViewModel
 
                 ProjectBin.AddMediaItem(mediaItem);
 
-                // 첫 번째 파일은 타임라인에도 자동 추가
-                if (fileIndex == 0)
+                // 타임라인이 비어있고 첫 번째 파일일 때만 자동 추가
+                if (fileIndex == 0 && Timeline.Clips.Count == 0)
                 {
-                    await Timeline.AddVideoClipAsync(filePath, proxyPath);
-                    Preview.RenderFrameAsync(0);
+                    try
+                    {
+                        await Timeline.AddVideoClipAsync(filePath, proxyPath);
+                        Preview.RenderFrameAsync(0);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Timeline add failed for {fileName}: {ex.Message}");
+                    }
                 }
 
                 fileIndex++;

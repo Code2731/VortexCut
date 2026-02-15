@@ -1,8 +1,8 @@
 # VortexCut 기술 명세서 (Technical Specification)
 
-> **작성일**: 2026-02-15
-> **버전**: 0.11.0 (오디오 볼륨/페이드 + 클립 속도 조절)
-> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절
+> **작성일**: 2026-02-16
+> **버전**: 0.12.0 (워크스페이스 UI 통합 + 트랙 뮤트 FFI)
+> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절, 워크스페이스 전환
 
 ## 1. 개요
 
@@ -867,6 +867,19 @@ dotnet build VortexCut.sln -c Release
 - [x] ClipModel Volume/Speed/FadeInMs/FadeOutMs 프로퍼티 + 직렬화
 - [x] Inspector Audio 탭 — Volume(0~200%), Speed(0.25x~4.0x), Fade(0~5000ms) 슬라이더
 
+### Phase 11: 워크스페이스 UI 통합 + 트랙 뮤트 FFI (완료 ✅ 2026-02-16)
+
+- [x] Inspector TabControl(5탭) 제거 → 4개 독립 패널 (Properties/Color/Audio/Effects) 전환 구조
+- [x] MainViewModel.ActiveWorkspace + SetWorkspaceCommand — 상단 워크스페이스 버튼 바인딩
+- [x] MainWindow.axaml.cs 워크스페이스 버튼 활성 스타일 (AccentBrush + SemiBold)
+- [x] PropertyGrid 제거 → 커스텀 Properties 패널 (StartTime/Duration/Opacity 슬라이더)
+- [x] 워크스페이스 전환 시 슬라이더 값 재동기화 (SyncPropertiesToClip, SyncSlidersToClip 등)
+- [x] SelectedClip 바인딩 수정 — ClipCanvasPanel.Input.cs에서 SelectedClip(singular) 동기화
+- [x] Rust VideoTrack에 muted 필드 추가 + get_clip_at_time() muted 체크
+- [x] FFI: timeline_set_track_muted() — C# → Rust 트랙 뮤트 동기화
+- [x] TrackHeaderControl MuteButton IsCheckedChanged → ProjectService.SetTrackMuted()
+- [x] ProjectBinView 다중 파일 임포트 시 auto-add-to-timeline 가드
+
 ## 9. 테스트 전략
 
 ### 9.1 Rust 테스트
@@ -1126,7 +1139,7 @@ if (width * height * 4 > MAX_FRAME_SIZE) {
 
 ---
 
-**마지막 업데이트**: 2026-02-15 (Phase 10 완료: 오디오 볼륨/페이드 + 클립 속도 조절)
+**마지막 업데이트**: 2026-02-16 (Phase 11 완료: 워크스페이스 UI 통합 + 트랙 뮤트 FFI)
 **작성자**: Claude Sonnet 4.5 / Claude Opus 4.6
-**Phase 10 구현 기간**: 2026-02-15 (1일)
-**Phase 10 추가 코드**: ~500 라인 (Rust clip/mixer/FFI + C# Interop/Model/Serialization + Inspector Audio UI)
+**Phase 11 구현 기간**: 2026-02-16 (1일)
+**Phase 11 추가 코드**: ~930 라인 (Inspector 재구성 + Properties 패널 + 워크스페이스 시스템 + 트랙 뮤트 FFI 파이프라인)

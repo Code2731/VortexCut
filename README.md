@@ -22,6 +22,8 @@ VortexCut은 고성능 **Rust 렌더링 엔진**(ffmpeg-next)과 현대적인 **
 - 📝 **자막 시스템**: SRT 임포트, 타임라인 편집, Export 번인 (Avalonia→RGBA→Rust 알파 블렌딩)
 - ↩️ **Undo/Redo**: Command 패턴 기반, Razor/이동/트림/삭제 모두 지원
 - 🎥 **Clip Monitor**: Source Monitor 독립 프리뷰, Mark In/Out, 스마트 타임라인 삽입
+- 🎛️ **워크스페이스 시스템**: Editing/Color/Audio/Effects 워크스페이스 전환 (DaVinci Resolve 스타일)
+- 🔇 **트랙 뮤트**: M/S/L 버튼 → Rust FFI 동기화 (비디오+오디오 트랙)
 
 ### 기술 스택
 
@@ -160,6 +162,15 @@ dotnet test VortexCut.Tests
 
 ## 현재 상태
 
+### ✅ Phase 11 완료 (2026-02-16) - 워크스페이스 UI 통합 + 트랙 뮤트
+
+- [x] **워크스페이스 전환 시스템** - 상단 Editing/Color/Audio/Effects 버튼 → 우측 Inspector 패널 콘텐츠 전환
+- [x] **Inspector TabControl 제거** - 5탭 TabControl → 4개 독립 패널 (Properties/Color/Audio/Effects)
+- [x] **커스텀 Properties 패널** - PropertyGrid → 직접 제작 슬라이더 기반 속성 편집 (StartTime, Duration, Opacity)
+- [x] **트랙 뮤트 FFI 파이프라인** - M 버튼 → C# ProjectService → Rust FFI → VideoTrack/AudioTrack.muted
+- [x] **SelectedClip 바인딩 수정** - ClipCanvasPanel → SelectedClip(singular) 동기화
+- [x] **워크스페이스별 슬라이더 동기화** - 패널 전환 시 현재 클립 값 자동 재동기화
+
 ### ✅ Phase 10 완료 (2026-02-15) - 아키텍처 리팩토링 (SOLID + DI)
 
 - [x] **ClipCanvasPanel partial class 분할** - 2,541줄 God Object → 7개 파일 (Rendering, Input, DragDrop 등)
@@ -212,6 +223,7 @@ dotnet test VortexCut.Tests
 - [x] **썸네일 스트립** - 비동기 생성, 캐싱, LOD 시스템
 
 ### 📋 계획
+- [ ] 멀티 타임라인 (시퀀스 기반 편집)
 - [ ] 트랜지션 시스템 (Crossfade/Dissolve/Wipe)
 - [ ] 키프레임 애니메이션
 - [ ] C# 유닛 테스트
@@ -249,4 +261,4 @@ dotnet test VortexCut.Tests
 
 ---
 
-**마지막 업데이트**: 2026-02-15
+**마지막 업데이트**: 2026-02-16

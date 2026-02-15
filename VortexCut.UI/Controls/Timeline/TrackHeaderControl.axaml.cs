@@ -1,9 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using VortexCut.Core.Models;
+using VortexCut.UI.ViewModels;
 
 namespace VortexCut.UI.Controls.Timeline;
 
@@ -138,6 +141,25 @@ public partial class TrackHeaderControl : UserControl
         {
             _trackNameEditor.KeyDown += OnEditorKeyDown;
             _trackNameEditor.LostFocus += OnEditorLostFocus;
+        }
+
+        // M 버튼 토글 → Rust 트랙 뮤트 동기화
+        var muteButton = this.FindControl<ToggleButton>("MuteButton");
+        if (muteButton != null)
+        {
+            muteButton.IsCheckedChanged += OnMuteToggled;
+        }
+    }
+
+    private void OnMuteToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (Track == null) return;
+
+        // MainViewModel → ProjectService 경로로 Rust에 뮤트 동기화
+        var mainWindow = TopLevel.GetTopLevel(this);
+        if (mainWindow?.DataContext is MainViewModel mainVm)
+        {
+            mainVm.Timeline.ProjectServiceRef.SetTrackMuted(Track.Id, Track.IsMuted);
         }
     }
 

@@ -233,6 +233,15 @@ public class ProjectService : IProjectService
     }
 
     /// <summary>
+    /// 트랙 뮤트 설정 (TrackHeader M 버튼에서 호출)
+    /// </summary>
+    public void SetTrackMuted(ulong trackId, bool muted)
+    {
+        try { _timelineService.SetTrackMuted(trackId, muted); }
+        catch { /* Timeline 미생성 시 무시 */ }
+    }
+
+    /// <summary>
     /// 클립 이펙트 설정 (Inspector Color 탭에서 호출)
     /// </summary>
     public void SetClipEffects(ulong clipId, float brightness, float contrast, float saturation, float temperature)

@@ -93,6 +93,41 @@ public class InspectorViewModel
         _preview.RenderFrameAsync(_timeline.CurrentTimeMs);
     }
 
+    // ==================== Subtitle ====================
+
+    /// <summary>
+    /// 자막 텍스트 적용
+    /// </summary>
+    public void ApplySubtitleText(SubtitleClipModel clip, string text)
+    {
+        clip.Text = text;
+        _preview.RefreshSubtitleOverlay();
+    }
+
+    /// <summary>
+    /// 자막 스타일 적용 (폰트 크기, 위치, Bold, Italic)
+    /// </summary>
+    public void ApplySubtitleStyle(SubtitleClipModel clip, double fontSize, SubtitlePosition position, bool isBold, bool isItalic)
+    {
+        clip.Style.FontSize = fontSize;
+        clip.Style.Position = position;
+        clip.Style.IsBold = isBold;
+        clip.Style.IsItalic = isItalic;
+        _preview.RefreshSubtitleOverlay();
+    }
+
+    /// <summary>
+    /// 자막 스타일 초기화
+    /// </summary>
+    public void ResetSubtitleStyle(SubtitleClipModel clip)
+    {
+        clip.Style.FontSize = 48;
+        clip.Style.Position = SubtitlePosition.Bottom;
+        clip.Style.IsBold = false;
+        clip.Style.IsItalic = false;
+        _preview.RefreshSubtitleOverlay();
+    }
+
     // ==================== Transition ====================
 
     /// <summary>

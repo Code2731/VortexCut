@@ -3,260 +3,298 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:VortexCut.UI.ViewModels"
-             xmlns:apc="using:Avalonia.PropertyGrid.Controls"
              mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="600"
              x:Class="VortexCut.UI.Views.InspectorView"
              x:DataType="vm:MainViewModel">
 
     <Grid RowDefinitions="Auto, *">
+        <!-- 워크스페이스 이름 헤더 -->
         <Border Classes="PanelHeader">
-            <TextBlock Classes="PanelTitle" Text="INSPECTOR"/>
+            <TextBlock x:Name="WorkspaceTitle" Classes="PanelTitle" Text="PROPERTIES"/>
         </Border>
 
-        <TabControl Grid.Row="1" Background="{StaticResource BgPanelBrush}">
-            <!-- Properties Tab — PropertyGrid 사용 -->
-            <TabItem Header="Properties">
-                <Panel>
-                    <!-- 클립 선택 시 PropertyGrid 표시 -->
-                    <Panel IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <apc:PropertyGrid DataContext="{Binding Timeline.SelectedClip}"/>
-                    </Panel>
+        <!-- ==================== Editing: Properties ==================== -->
+        <Panel x:Name="PropertiesPanel" Grid.Row="1" IsVisible="True" Background="{StaticResource BgPanelBrush}">
+            <!-- 클립 선택 시 속성 편집 -->
+            <ScrollViewer x:Name="PropertiesScrollViewer"
+                          IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <StackPanel Margin="12" Spacing="12">
+                    <TextBlock Text="Clip Info" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
 
-                    <!-- 선택 없을 때 안내 -->
-                    <TextBlock
-                        IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNull}}"
-                        Text="클립을 선택하세요"
-                        Foreground="{StaticResource TextSecondaryBrush}"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        FontSize="13"/>
-                </Panel>
-            </TabItem>
-
-            <!-- Audio Tab — 클립 볼륨/속도/페이드 -->
-            <TabItem Header="Audio">
-                <Panel>
-                    <!-- 클립 선택 시 슬라이더 -->
-                    <ScrollViewer IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <StackPanel Margin="12" Spacing="12">
-                            <TextBlock Text="Clip Audio" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-
-                            <!-- Volume (0% ~ 200%) -->
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*, Auto">
-                                    <TextBlock Text="Volume" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="VolumeValueText" Grid.Column="1" Text="100%" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                                </Grid>
-                                <Slider x:Name="VolumeSlider" Minimum="0" Maximum="200" Value="100" SmallChange="1" LargeChange="10"/>
-                            </StackPanel>
-
-                            <!-- Speed (0.25x ~ 4.0x) -->
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*, Auto">
-                                    <TextBlock Text="Speed" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="SpeedValueText" Grid.Column="1" Text="1.00x" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                                </Grid>
-                                <Slider x:Name="SpeedSlider" Minimum="25" Maximum="400" Value="100" SmallChange="5" LargeChange="25"/>
-                            </StackPanel>
-
-                            <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
-
-                            <!-- Fade In/Out -->
-                            <TextBlock Text="Fade" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*, Auto">
-                                    <TextBlock Text="Fade In" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="FadeInValueText" Grid.Column="1" Text="0ms" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                                </Grid>
-                                <Slider x:Name="FadeInSlider" Minimum="0" Maximum="5000" Value="0" SmallChange="100" LargeChange="500"/>
-                            </StackPanel>
-
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*, Auto">
-                                    <TextBlock Text="Fade Out" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="FadeOutValueText" Grid.Column="1" Text="0ms" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                                </Grid>
-                                <Slider x:Name="FadeOutSlider" Minimum="0" Maximum="5000" Value="0" SmallChange="100" LargeChange="500"/>
-                            </StackPanel>
-
-                            <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
-
-                            <!-- Reset 버튼 -->
-                            <Button x:Name="ResetAudioButton"
-                                    Content="Reset All"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    FontSize="11"/>
-                        </StackPanel>
-                    </ScrollViewer>
-
-                    <!-- 미선택 시 안내 -->
-                    <TextBlock
-                        IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNull}}"
-                        Text="클립을 선택하세요"
-                        Foreground="{StaticResource TextSecondaryBrush}"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        FontSize="13"/>
-                </Panel>
-            </TabItem>
-
-            <!-- Subtitle Tab -->
-            <TabItem Header="Subtitle">
-                <ScrollViewer>
-                    <StackPanel Margin="12" Spacing="12">
-                        <!-- 자막 클립 선택 시 편집 UI -->
-                        <TextBlock Text="자막 편집" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="텍스트" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBox AcceptsReturn="True"
-                                     MinHeight="80"
-                                     MaxHeight="200"
-                                     TextWrapping="Wrap"
-                                     Watermark="자막 텍스트를 입력하세요..."
-                                     FontSize="13"/>
-                        </StackPanel>
-
-                        <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
-
-                        <TextBlock Text="스타일" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="폰트 크기" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <Slider Minimum="12" Maximum="96" Value="48"/>
-                        </StackPanel>
-
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="위치" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <ComboBox SelectedIndex="2" HorizontalAlignment="Stretch">
-                                <ComboBoxItem Content="상단"/>
-                                <ComboBoxItem Content="중앙"/>
-                                <ComboBoxItem Content="하단"/>
-                            </ComboBox>
-                        </StackPanel>
-
-                        <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
-
-                        <TextBlock Text="SRT 가져오기/내보내기" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-
-                        <TextBlock Text="Ctrl+Shift+I로 SRT 파일을 가져올 수 있습니다."
-                                   Foreground="{StaticResource TextSecondaryBrush}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"/>
+                    <!-- 파일 이름 (읽기 전용) -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Name" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                        <TextBlock x:Name="ClipNameText" Text="-" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"
+                                   TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
-                </ScrollViewer>
-            </TabItem>
 
-            <!-- Transition Tab — 비디오 트랜지션 타입 설정 -->
-            <TabItem Header="Transition">
-                <Panel>
-                    <ScrollViewer IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <StackPanel Margin="12" Spacing="12">
-                            <TextBlock Text="Video Transition" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                    <!-- 파일 경로 (읽기 전용) -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Path" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                        <TextBlock x:Name="ClipPathText" Text="-" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10"
+                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Timeline.SelectedClip.FilePath}"/>
+                    </StackPanel>
 
-                            <TextBlock Text="겹치는 클립 구간에서 적용됩니다."
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       FontSize="11"
-                                       TextWrapping="Wrap"/>
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                    <TextBlock Text="Position" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                    <!-- 시작 시간 -->
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Start Time (ms)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="StartTimeValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="StartTimeSlider" Minimum="0" Maximum="600000" Value="0" SmallChange="100" LargeChange="1000"/>
+                    </StackPanel>
+
+                    <!-- 길이 -->
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Duration (ms)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="DurationValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="DurationSlider" Minimum="100" Maximum="600000" Value="1000" SmallChange="100" LargeChange="1000"/>
+                    </StackPanel>
+
+                    <!-- 트랙 번호 -->
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Track" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="TrackIndexValueText" Grid.Column="1" Text="V1" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                    <TextBlock Text="Opacity" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Opacity" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="OpacityValueText" Grid.Column="1" Text="100%" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="OpacitySlider" Minimum="0" Maximum="100" Value="100" SmallChange="1" LargeChange="10"/>
+                    </StackPanel>
+
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                    <Button x:Name="ResetPropertiesButton"
+                            Content="Reset Position"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            FontSize="11"/>
+                </StackPanel>
+            </ScrollViewer>
+            <!-- 선택 없을 때 안내 -->
+            <TextBlock
+                IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNull}}"
+                Text="클립을 선택하세요"
+                Foreground="{StaticResource TextSecondaryBrush}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontSize="13"/>
+        </Panel>
+
+        <!-- ==================== Color ==================== -->
+        <Panel x:Name="ColorPanel" Grid.Row="1" IsVisible="False" Background="{StaticResource BgPanelBrush}">
+            <ScrollViewer>
+                <StackPanel Margin="12" Spacing="12">
+                    <TextBlock Text="Color Grading" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Brightness" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="BrightnessValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="BrightnessSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Contrast" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="ContrastValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="ContrastSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Saturation" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="SaturationValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="SaturationSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
+                    </StackPanel>
+
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Temperature" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="TemperatureValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="TemperatureSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
+                    </StackPanel>
+
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                    <Button x:Name="ResetEffectsButton"
+                            Content="Reset All"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            FontSize="11"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Panel>
+
+        <!-- ==================== Audio ==================== -->
+        <Panel x:Name="AudioPanel" Grid.Row="1" IsVisible="False" Background="{StaticResource BgPanelBrush}">
+            <ScrollViewer>
+                <StackPanel Margin="12" Spacing="12">
+                    <TextBlock Text="Clip Audio" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                    <!-- Volume (0% ~ 200%) -->
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Volume" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="VolumeValueText" Grid.Column="1" Text="100%" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="VolumeSlider" Minimum="0" Maximum="200" Value="100" SmallChange="1" LargeChange="10"/>
+                    </StackPanel>
+
+                    <!-- Speed (0.25x ~ 4.0x) -->
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Speed" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="SpeedValueText" Grid.Column="1" Text="1.00x" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="SpeedSlider" Minimum="25" Maximum="400" Value="100" SmallChange="5" LargeChange="25"/>
+                    </StackPanel>
+
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                    <!-- Fade In/Out -->
+                    <TextBlock Text="Fade" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Fade In" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="FadeInValueText" Grid.Column="1" Text="0ms" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="FadeInSlider" Minimum="0" Maximum="5000" Value="0" SmallChange="100" LargeChange="500"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*, Auto">
+                            <TextBlock Text="Fade Out" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                            <TextBlock x:Name="FadeOutValueText" Grid.Column="1" Text="0ms" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                        </Grid>
+                        <Slider x:Name="FadeOutSlider" Minimum="0" Maximum="5000" Value="0" SmallChange="100" LargeChange="500"/>
+                    </StackPanel>
+
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                    <Button x:Name="ResetAudioButton"
+                            Content="Reset All"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            FontSize="11"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Panel>
+
+        <!-- ==================== Effects: Subtitle + Transition ==================== -->
+        <Panel x:Name="EffectsPanel" Grid.Row="1" IsVisible="False" Background="{StaticResource BgPanelBrush}">
+            <ScrollViewer>
+                <StackPanel Margin="12" Spacing="12">
+
+                    <!-- Subtitle 섹션 (자막 클립일 때만 표시) -->
+                    <Panel x:Name="SubtitleEditPanel" IsVisible="False">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="자막 편집" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
 
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Transition Type" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                <ComboBox x:Name="TransitionTypeComboBox" HorizontalAlignment="Stretch" SelectedIndex="0">
-                                    <ComboBoxItem Content="None"/>
-                                    <ComboBoxItem Content="Crossfade"/>
-                                    <ComboBoxItem Content="Fade through Black"/>
-                                    <ComboBoxItem Content="Wipe Left"/>
-                                    <ComboBoxItem Content="Wipe Right"/>
-                                    <ComboBoxItem Content="Wipe Up"/>
-                                    <ComboBoxItem Content="Wipe Down"/>
+                                <TextBlock Text="텍스트" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                <TextBox x:Name="SubtitleTextBox"
+                                         AcceptsReturn="True"
+                                         MinHeight="80"
+                                         MaxHeight="200"
+                                         TextWrapping="Wrap"
+                                         Watermark="자막 텍스트를 입력하세요..."
+                                         FontSize="13"/>
+                            </StackPanel>
+
+                            <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                            <TextBlock Text="스타일" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                            <!-- Font Size -->
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*, Auto">
+                                    <TextBlock Text="폰트 크기" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                    <TextBlock x:Name="FontSizeValueText" Grid.Column="1" Text="48" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                                </Grid>
+                                <Slider x:Name="FontSizeSlider" Minimum="12" Maximum="96" Value="48" SmallChange="1" LargeChange="8"/>
+                            </StackPanel>
+
+                            <!-- Position -->
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="위치" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                <ComboBox x:Name="SubtitlePositionComboBox" SelectedIndex="2" HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="상단"/>
+                                    <ComboBoxItem Content="중앙"/>
+                                    <ComboBoxItem Content="하단"/>
                                 </ComboBox>
                             </StackPanel>
 
-                            <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+                            <!-- Bold / Italic -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ToggleButton x:Name="BoldToggle" Content="B" FontWeight="Bold" Width="36" Height="30"
+                                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center" FontSize="13"/>
+                                <ToggleButton x:Name="ItalicToggle" Content="I" FontStyle="Italic" Width="36" Height="30"
+                                              HorizontalContentAlignment="Center" VerticalContentAlignment="Center" FontSize="13"/>
+                            </StackPanel>
 
-                            <Button x:Name="ResetTransitionButton"
-                                    Content="Reset"
+                            <Button x:Name="ResetSubtitleButton"
+                                    Content="Reset Style"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"
                                     FontSize="11"/>
-                        </StackPanel>
-                    </ScrollViewer>
-
-                    <TextBlock
-                        IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNull}}"
-                        Text="클립을 선택하세요"
-                        Foreground="{StaticResource TextSecondaryBrush}"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        FontSize="13"/>
-                </Panel>
-            </TabItem>
-
-            <!-- Color Grade Tab -->
-            <TabItem Header="Color">
-                <Panel>
-                    <!-- 클립 선택 시 이펙트 슬라이더 -->
-                    <ScrollViewer IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <StackPanel Margin="12" Spacing="12">
-                            <TextBlock Text="Color Grading" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*, Auto">
-                                    <TextBlock Text="Brightness" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="BrightnessValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                                </Grid>
-                                <Slider x:Name="BrightnessSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
-                            </StackPanel>
-
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*, Auto">
-                                    <TextBlock Text="Contrast" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="ContrastValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                                </Grid>
-                                <Slider x:Name="ContrastSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
-                            </StackPanel>
-
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*, Auto">
-                                    <TextBlock Text="Saturation" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="SaturationValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                                </Grid>
-                                <Slider x:Name="SaturationSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
-                            </StackPanel>
 
                             <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
-
-                            <StackPanel Spacing="4">
-                                <Grid ColumnDefinitions="*, Auto">
-                                    <TextBlock Text="Temperature" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="TemperatureValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                                </Grid>
-                                <Slider x:Name="TemperatureSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
-                            </StackPanel>
-
-                            <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
-
-                            <!-- Reset 버튼 -->
-                            <Button x:Name="ResetEffectsButton"
-                                    Content="Reset All"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    FontSize="11"/>
                         </StackPanel>
-                    </ScrollViewer>
+                    </Panel>
 
-                    <!-- 미선택 시 안내 -->
-                    <TextBlock
-                        IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNull}}"
-                        Text="클립을 선택하세요"
-                        Foreground="{StaticResource TextSecondaryBrush}"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        FontSize="13"/>
-                </Panel>
-            </TabItem>
-        </TabControl>
+                    <!-- Transition 섹션 (항상 표시) -->
+                    <TextBlock Text="Video Transition" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                    <TextBlock Text="겹치는 클립 구간에서 적용됩니다."
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="11"
+                               TextWrapping="Wrap"/>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Transition Type" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                        <ComboBox x:Name="TransitionTypeComboBox" HorizontalAlignment="Stretch" SelectedIndex="0">
+                            <ComboBoxItem Content="None"/>
+                            <ComboBoxItem Content="Crossfade"/>
+                            <ComboBoxItem Content="Fade through Black"/>
+                            <ComboBoxItem Content="Wipe Left"/>
+                            <ComboBoxItem Content="Wipe Right"/>
+                            <ComboBoxItem Content="Wipe Up"/>
+                            <ComboBoxItem Content="Wipe Down"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                    <Button x:Name="ResetTransitionButton"
+                            Content="Reset"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            FontSize="11"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Panel>
     </Grid>
 </UserControl>

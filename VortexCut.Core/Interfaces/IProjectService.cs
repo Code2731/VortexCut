@@ -73,6 +73,11 @@ public interface IProjectService : IDisposable
     void SetClipTransition(ulong clipId, TransitionType type);
 
     /// <summary>
+    /// 트랙 뮤트 설정
+    /// </summary>
+    void SetTrackMuted(ulong trackId, bool muted);
+
+    /// <summary>
     /// 클립 이펙트 설정 (Brightness, Contrast, Saturation, Temperature)
     /// </summary>
     void SetClipEffects(ulong clipId, float brightness, float contrast, float saturation, float temperature);
