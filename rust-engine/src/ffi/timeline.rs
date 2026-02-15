@@ -363,3 +363,114 @@ pub extern "C" fn timeline_set_video_clip_trim(
 
     ERROR_INVALID_PARAM
 }
+
+/// 클립 볼륨 설정 (비디오/오디오 트랙 모두 순회)
+/// volume: 0.0~2.0
+#[no_mangle]
+pub extern "C" fn timeline_set_clip_volume(
+    timeline: *mut std::ffi::c_void,
+    clip_id: u64,
+    volume: f32,
+) -> i32 {
+    if timeline.is_null() {
+        return ERROR_NULL_PTR;
+    }
+
+    unsafe {
+        let timeline_arc = &*(timeline as *const Mutex<Timeline>);
+        let mut timeline = match timeline_arc.lock() {
+            Ok(t) => t,
+            Err(_) => return ERROR_INVALID_PARAM,
+        };
+
+        // 비디오 트랙에서 찾기
+        for track in &mut timeline.video_tracks {
+            if let Some(clip) = track.get_clip_by_id_mut(clip_id) {
+                clip.volume = volume;
+                return ERROR_SUCCESS;
+            }
+        }
+
+        // 오디오 트랙에서 찾기
+        for track in &mut timeline.audio_tracks {
+            if let Some(clip) = track.clips.iter_mut().find(|c| c.id == clip_id) {
+                clip.volume = volume;
+                return ERROR_SUCCESS;
+            }
+        }
+    }
+
+    ERROR_INVALID_PARAM
+}
+
+/// 클립 속도 설정 (비디오/오디오 트랙 모두 순회)
+/// speed: 0.25~4.0
+#[no_mangle]
+pub extern "C" fn timeline_set_clip_speed(
+    timeline: *mut std::ffi::c_void,
+    clip_id: u64,
+    speed: f64,
+) -> i32 {
+    if timeline.is_null() {
+        return ERROR_NULL_PTR;
+    }
+
+    unsafe {
+        let timeline_arc = &*(timeline as *const Mutex<Timeline>);
+        let mut timeline = match timeline_arc.lock() {
+            Ok(t) => t,
+            Err(_) => return ERROR_INVALID_PARAM,
+        };
+
+        // 비디오 트랙에서 찾기
+        for track in &mut timeline.video_tracks {
+            if let Some(clip) = track.get_clip_by_id_mut(clip_id) {
+                clip.speed = speed;
+                return ERROR_SUCCESS;
+            }
+        }
+
+        // 오디오 트랙에서 찾기
+        for track in &mut timeline.audio_tracks {
+            if let Some(clip) = track.clips.iter_mut().find(|c| c.id == clip_id) {
+                clip.speed = speed;
+                return ERROR_SUCCESS;
+            }
+        }
+    }
+
+    ERROR_INVALID_PARAM
+}
+
+/// 오디오 클립 페이드 설정
+/// fade_in_ms, fade_out_ms: 0 = 페이드 없음
+#[no_mangle]
+pub extern "C" fn timeline_set_clip_fade(
+    timeline: *mut std::ffi::c_void,
+    clip_id: u64,
+    fade_in_ms: i64,
+    fade_out_ms: i64,
+) -> i32 {
+    if timeline.is_null() {
+        return ERROR_NULL_PTR;
+    }
+
+    unsafe {
+        let timeline_arc = &*(timeline as *const Mutex<Timeline>);
+        let mut timeline = match timeline_arc.lock() {
+            Ok(t) => t,
+            Err(_) => return ERROR_INVALID_PARAM,
+        };
+
+        // 오디오 트랙에서 찾기
+        for track in &mut timeline.audio_tracks {
+            if let Some(clip) = track.clips.iter_mut().find(|c| c.id == clip_id) {
+                clip.fade_in_ms = fade_in_ms;
+                clip.fade_out_ms = fade_out_ms;
+                return ERROR_SUCCESS;
+            }
+        }
+    }
+
+    ERROR_INVALID_PARAM
+}

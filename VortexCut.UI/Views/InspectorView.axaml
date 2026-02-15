@@ -33,30 +33,73 @@
                 </Panel>
             </TabItem>
 
-            <!-- Audio Mixer Tab -->
+            <!-- Audio Tab — 클립 볼륨/속도/페이드 -->
             <TabItem Header="Audio">
-                <ScrollViewer>
-                    <StackPanel Margin="12" Spacing="12">
-                        <TextBlock Text="Audio Mixer" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Master Volume" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <Slider Minimum="0" Maximum="100" Value="100"/>
-                            <TextBlock Text="100%" HorizontalAlignment="Right" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
-                        </StackPanel>
+                <Panel>
+                    <!-- 클립 선택 시 슬라이더 -->
+                    <ScrollViewer IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Margin="12" Spacing="12">
+                            <TextBlock Text="Clip Audio" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
 
-                        <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,8"/>
+                            <!-- Volume (0% ~ 200%) -->
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*, Auto">
+                                    <TextBlock Text="Volume" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                    <TextBlock x:Name="VolumeValueText" Grid.Column="1" Text="100%" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                                </Grid>
+                                <Slider x:Name="VolumeSlider" Minimum="0" Maximum="200" Value="100" SmallChange="1" LargeChange="10"/>
+                            </StackPanel>
 
-                        <TextBlock Text="Track Levels" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="A1 - Audio Track 1" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <Slider Minimum="0" Maximum="100" Value="80"/>
+                            <!-- Speed (0.25x ~ 4.0x) -->
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*, Auto">
+                                    <TextBlock Text="Speed" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                    <TextBlock x:Name="SpeedValueText" Grid.Column="1" Text="1.00x" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                                </Grid>
+                                <Slider x:Name="SpeedSlider" Minimum="25" Maximum="400" Value="100" SmallChange="5" LargeChange="25"/>
+                            </StackPanel>
+
+                            <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                            <!-- Fade In/Out -->
+                            <TextBlock Text="Fade" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*, Auto">
+                                    <TextBlock Text="Fade In" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                    <TextBlock x:Name="FadeInValueText" Grid.Column="1" Text="0ms" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                                </Grid>
+                                <Slider x:Name="FadeInSlider" Minimum="0" Maximum="5000" Value="0" SmallChange="100" LargeChange="500"/>
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <Grid ColumnDefinitions="*, Auto">
+                                    <TextBlock Text="Fade Out" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+                                    <TextBlock x:Name="FadeOutValueText" Grid.Column="1" Text="0ms" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                                </Grid>
+                                <Slider x:Name="FadeOutSlider" Minimum="0" Maximum="5000" Value="0" SmallChange="100" LargeChange="500"/>
+                            </StackPanel>
+
+                            <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
+
+                            <!-- Reset 버튼 -->
+                            <Button x:Name="ResetAudioButton"
+                                    Content="Reset All"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    FontSize="11"/>
                         </StackPanel>
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="A2 - Audio Track 2" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <Slider Minimum="0" Maximum="100" Value="60"/>
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
+                    </ScrollViewer>
+
+                    <!-- 미선택 시 안내 -->
+                    <TextBlock
+                        IsVisible="{Binding Timeline.SelectedClip, Converter={x:Static ObjectConverters.IsNull}}"
+                        Text="클립을 선택하세요"
+                        Foreground="{StaticResource TextSecondaryBrush}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontSize="13"/>
+                </Panel>
             </TabItem>
 
             <!-- Subtitle Tab -->

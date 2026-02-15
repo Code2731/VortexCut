@@ -7,6 +7,7 @@ namespace VortexCut.UI.Views;
 
 public partial class InspectorView : UserControl
 {
+    // Color 탭 슬라이더
     private Slider? _brightnessSlider;
     private Slider? _contrastSlider;
     private Slider? _saturationSlider;
@@ -15,6 +16,16 @@ public partial class InspectorView : UserControl
     private TextBlock? _contrastValueText;
     private TextBlock? _saturationValueText;
     private TextBlock? _temperatureValueText;
+
+    // Audio 탭 슬라이더
+    private Slider? _volumeSlider;
+    private Slider? _speedSlider;
+    private Slider? _fadeInSlider;
+    private Slider? _fadeOutSlider;
+    private TextBlock? _volumeValueText;
+    private TextBlock? _speedValueText;
+    private TextBlock? _fadeInValueText;
+    private TextBlock? _fadeOutValueText;
 
     // 프로그래밍적 슬라이더 값 설정 시 이벤트 무시용 플래그
     private bool _isUpdatingSliders;
@@ -28,7 +39,10 @@ public partial class InspectorView : UserControl
     {
         base.OnLoaded(e);
         SetupColorSliders();
+        SetupAudioSliders();
     }
+
+    // ==================== Color 탭 ====================
 
     private void SetupColorSliders()
     {
@@ -41,13 +55,11 @@ public partial class InspectorView : UserControl
         _saturationValueText = this.FindControl<TextBlock>("SaturationValueText");
         _temperatureValueText = this.FindControl<TextBlock>("TemperatureValueText");
 
-        // Slider ValueChanged 이벤트 연결
         if (_brightnessSlider != null) _brightnessSlider.ValueChanged += OnEffectSliderChanged;
         if (_contrastSlider != null) _contrastSlider.ValueChanged += OnEffectSliderChanged;
         if (_saturationSlider != null) _saturationSlider.ValueChanged += OnEffectSliderChanged;
         if (_temperatureSlider != null) _temperatureSlider.ValueChanged += OnEffectSliderChanged;
 
-        // Reset 버튼
         var resetButton = this.FindControl<Button>("ResetEffectsButton");
         if (resetButton != null) resetButton.Click += OnResetEffectsClick;
 
@@ -63,12 +75,10 @@ public partial class InspectorView : UserControl
         if (e.PropertyName == "SelectedClip")
         {
             SyncSlidersToClip();
+            SyncAudioSlidersToClip();
         }
     }
 
-    /// <summary>
-    /// 선택된 클립의 이펙트 값을 슬라이더에 동기화
-    /// </summary>
     private void SyncSlidersToClip()
     {
         _isUpdatingSliders = true;
@@ -86,14 +96,13 @@ public partial class InspectorView : UserControl
             }
             else
             {
-                // 클립의 이펙트 값을 슬라이더에 반영 (-1.0~1.0 → -100~100)
                 SetSliderValue(_brightnessSlider, clip.Brightness * 100.0);
                 SetSliderValue(_contrastSlider, clip.Contrast * 100.0);
                 SetSliderValue(_saturationSlider, clip.Saturation * 100.0);
                 SetSliderValue(_temperatureSlider, clip.Temperature * 100.0);
             }
 
-            UpdateValueTexts();
+            UpdateColorValueTexts();
         }
         finally
         {
@@ -107,7 +116,7 @@ public partial class InspectorView : UserControl
             slider.Value = Math.Round(value);
     }
 
-    private void UpdateValueTexts()
+    private void UpdateColorValueTexts()
     {
         if (_brightnessValueText != null && _brightnessSlider != null)
             _brightnessValueText.Text = ((int)_brightnessSlider.Value).ToString();
@@ -119,9 +128,6 @@ public partial class InspectorView : UserControl
             _temperatureValueText.Text = ((int)_temperatureSlider.Value).ToString();
     }
 
-    /// <summary>
-    /// 이펙트 슬라이더 값 변경 → Rust에 전달 + 프리뷰 갱신
-    /// </summary>
     private void OnEffectSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
     {
         if (_isUpdatingSliders) return;
@@ -130,7 +136,6 @@ public partial class InspectorView : UserControl
         var clip = mainVm?.Timeline.SelectedClip;
         if (clip == null || mainVm == null) return;
 
-        // 슬라이더 값 → ClipModel (-100~100 → -1.0~1.0)
         double brightness = (_brightnessSlider?.Value ?? 0) / 100.0;
         double contrast = (_contrastSlider?.Value ?? 0) / 100.0;
         double saturation = (_saturationSlider?.Value ?? 0) / 100.0;
@@ -141,9 +146,8 @@ public partial class InspectorView : UserControl
         clip.Saturation = saturation;
         clip.Temperature = temperature;
 
-        UpdateValueTexts();
+        UpdateColorValueTexts();
 
-        // Rust Renderer에 이펙트 전달 (캐시 클리어 포함)
         mainVm.ProjectService.SetClipEffects(
             clip.Id,
             (float)brightness,
@@ -151,13 +155,9 @@ public partial class InspectorView : UserControl
             (float)saturation,
             (float)temperature);
 
-        // 프리뷰 갱신
         mainVm.Preview.RenderFrameAsync(mainVm.Timeline.CurrentTimeMs);
     }
 
-    /// <summary>
-    /// Reset All 버튼 → 모든 이펙트 0으로 초기화
-    /// </summary>
     private void OnResetEffectsClick(object? sender, RoutedEventArgs e)
     {
         var mainVm = DataContext as MainViewModel;
@@ -172,6 +172,135 @@ public partial class InspectorView : UserControl
         SyncSlidersToClip();
 
         mainVm.ProjectService.SetClipEffects(clip.Id, 0, 0, 0, 0);
+        mainVm.Preview.RenderFrameAsync(mainVm.Timeline.CurrentTimeMs);
+    }
+
+    // ==================== Audio 탭 ====================
+
+    private void SetupAudioSliders()
+    {
+        _volumeSlider = this.FindControl<Slider>("VolumeSlider");
+        _speedSlider = this.FindControl<Slider>("SpeedSlider");
+        _fadeInSlider = this.FindControl<Slider>("FadeInSlider");
+        _fadeOutSlider = this.FindControl<Slider>("FadeOutSlider");
+        _volumeValueText = this.FindControl<TextBlock>("VolumeValueText");
+        _speedValueText = this.FindControl<TextBlock>("SpeedValueText");
+        _fadeInValueText = this.FindControl<TextBlock>("FadeInValueText");
+        _fadeOutValueText = this.FindControl<TextBlock>("FadeOutValueText");
+
+        if (_volumeSlider != null) _volumeSlider.ValueChanged += OnAudioSliderChanged;
+        if (_speedSlider != null) _speedSlider.ValueChanged += OnAudioSliderChanged;
+        if (_fadeInSlider != null) _fadeInSlider.ValueChanged += OnAudioSliderChanged;
+        if (_fadeOutSlider != null) _fadeOutSlider.ValueChanged += OnAudioSliderChanged;
+
+        var resetAudioButton = this.FindControl<Button>("ResetAudioButton");
+        if (resetAudioButton != null) resetAudioButton.Click += OnResetAudioClick;
+    }
+
+    /// <summary>
+    /// 선택된 클립의 오디오 값을 슬라이더에 동기화
+    /// </summary>
+    private void SyncAudioSlidersToClip()
+    {
+        _isUpdatingSliders = true;
+        try
+        {
+            var mainVm = DataContext as MainViewModel;
+            var clip = mainVm?.Timeline.SelectedClip;
+
+            if (clip == null)
+            {
+                SetSliderValue(_volumeSlider, 100);
+                SetSliderValue(_speedSlider, 100);
+                SetSliderValue(_fadeInSlider, 0);
+                SetSliderValue(_fadeOutSlider, 0);
+            }
+            else
+            {
+                // Volume: 0.0~2.0 → 0~200
+                SetSliderValue(_volumeSlider, clip.Volume * 100.0);
+                // Speed: 0.25~4.0 → 25~400
+                SetSliderValue(_speedSlider, clip.Speed * 100.0);
+                // Fade: 직접 ms
+                SetSliderValue(_fadeInSlider, clip.FadeInMs);
+                SetSliderValue(_fadeOutSlider, clip.FadeOutMs);
+            }
+
+            UpdateAudioValueTexts();
+        }
+        finally
+        {
+            _isUpdatingSliders = false;
+        }
+    }
+
+    private void UpdateAudioValueTexts()
+    {
+        if (_volumeValueText != null && _volumeSlider != null)
+            _volumeValueText.Text = $"{(int)_volumeSlider.Value}%";
+        if (_speedValueText != null && _speedSlider != null)
+            _speedValueText.Text = $"{_speedSlider.Value / 100.0:F2}x";
+        if (_fadeInValueText != null && _fadeInSlider != null)
+            _fadeInValueText.Text = $"{(int)_fadeInSlider.Value}ms";
+        if (_fadeOutValueText != null && _fadeOutSlider != null)
+            _fadeOutValueText.Text = $"{(int)_fadeOutSlider.Value}ms";
+    }
+
+    /// <summary>
+    /// Audio 슬라이더 값 변경 → ClipModel + Rust FFI 전달
+    /// </summary>
+    private void OnAudioSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_isUpdatingSliders) return;
+
+        var mainVm = DataContext as MainViewModel;
+        var clip = mainVm?.Timeline.SelectedClip;
+        if (clip == null || mainVm == null) return;
+
+        // 슬라이더 → ClipModel
+        double volume = (_volumeSlider?.Value ?? 100) / 100.0;   // 0~200 → 0.0~2.0
+        double speed = (_speedSlider?.Value ?? 100) / 100.0;      // 25~400 → 0.25~4.0
+        long fadeInMs = (long)(_fadeInSlider?.Value ?? 0);
+        long fadeOutMs = (long)(_fadeOutSlider?.Value ?? 0);
+
+        clip.Volume = volume;
+        clip.Speed = speed;
+        clip.FadeInMs = fadeInMs;
+        clip.FadeOutMs = fadeOutMs;
+
+        UpdateAudioValueTexts();
+
+        // Rust Timeline에 전달
+        mainVm.ProjectService.SetClipVolume(clip.Id, (float)volume);
+        mainVm.ProjectService.SetClipSpeed(clip.Id, speed);
+        mainVm.ProjectService.SetClipFade(clip.Id, fadeInMs, fadeOutMs);
+
+        // Speed 변경 시 프리뷰 프레임 캐시 무효화 + 갱신
+        mainVm.ProjectService.ClearRenderCache();
+        mainVm.Preview.RenderFrameAsync(mainVm.Timeline.CurrentTimeMs);
+    }
+
+    /// <summary>
+    /// Reset All 버튼 → 오디오 설정 기본값으로 초기화
+    /// </summary>
+    private void OnResetAudioClick(object? sender, RoutedEventArgs e)
+    {
+        var mainVm = DataContext as MainViewModel;
+        var clip = mainVm?.Timeline.SelectedClip;
+        if (clip == null || mainVm == null) return;
+
+        clip.Volume = 1.0;
+        clip.Speed = 1.0;
+        clip.FadeInMs = 0;
+        clip.FadeOutMs = 0;
+
+        SyncAudioSlidersToClip();
+
+        mainVm.ProjectService.SetClipVolume(clip.Id, 1.0f);
+        mainVm.ProjectService.SetClipSpeed(clip.Id, 1.0);
+        mainVm.ProjectService.SetClipFade(clip.Id, 0, 0);
+
+        mainVm.ProjectService.ClearRenderCache();
         mainVm.Preview.RenderFrameAsync(mainVm.Timeline.CurrentTimeMs);
     }
 }

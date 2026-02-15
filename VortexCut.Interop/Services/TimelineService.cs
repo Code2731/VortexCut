@@ -249,6 +249,45 @@ public class TimelineService : IDisposable
         return (int)count;
     }
 
+    /// <summary>
+    /// 클립 볼륨 설정 (0.0~2.0)
+    /// </summary>
+    public void SetClipVolume(ulong clipId, float volume)
+    {
+        ThrowIfDisposed();
+        ThrowIfNoTimeline();
+
+        int result = NativeMethods.timeline_set_clip_volume(
+            _timeline!.DangerousGetHandle(), clipId, volume);
+        CheckError(result);
+    }
+
+    /// <summary>
+    /// 클립 속도 설정 (0.25~4.0)
+    /// </summary>
+    public void SetClipSpeed(ulong clipId, double speed)
+    {
+        ThrowIfDisposed();
+        ThrowIfNoTimeline();
+
+        int result = NativeMethods.timeline_set_clip_speed(
+            _timeline!.DangerousGetHandle(), clipId, speed);
+        CheckError(result);
+    }
+
+    /// <summary>
+    /// 오디오 클립 페이드 설정
+    /// </summary>
+    public void SetClipFade(ulong clipId, long fadeInMs, long fadeOutMs)
+    {
+        ThrowIfDisposed();
+        ThrowIfNoTimeline();
+
+        int result = NativeMethods.timeline_set_clip_fade(
+            _timeline!.DangerousGetHandle(), clipId, fadeInMs, fadeOutMs);
+        CheckError(result);
+    }
+
     private void ThrowIfDisposed()
     {
         if (_disposed)

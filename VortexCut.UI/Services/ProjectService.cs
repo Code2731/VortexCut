@@ -196,6 +196,33 @@ public class ProjectService : IDisposable
     }
 
     /// <summary>
+    /// 클립 볼륨 설정 (Inspector Audio 탭에서 호출)
+    /// </summary>
+    public void SetClipVolume(ulong clipId, float volume)
+    {
+        try { _timelineService.SetClipVolume(clipId, volume); }
+        catch { /* Timeline 미생성 시 무시 */ }
+    }
+
+    /// <summary>
+    /// 클립 속도 설정 (Inspector Audio 탭에서 호출)
+    /// </summary>
+    public void SetClipSpeed(ulong clipId, double speed)
+    {
+        try { _timelineService.SetClipSpeed(clipId, speed); }
+        catch { /* Timeline 미생성 시 무시 */ }
+    }
+
+    /// <summary>
+    /// 클립 페이드 설정 (Inspector Audio 탭에서 호출)
+    /// </summary>
+    public void SetClipFade(ulong clipId, long fadeInMs, long fadeOutMs)
+    {
+        try { _timelineService.SetClipFade(clipId, fadeInMs, fadeOutMs); }
+        catch { /* Timeline 미생성 시 무시 */ }
+    }
+
+    /// <summary>
     /// 클립 이펙트 설정 (Inspector Color 탭에서 호출)
     /// </summary>
     public void SetClipEffects(ulong clipId, float brightness, float contrast, float saturation, float temperature)
@@ -429,6 +456,14 @@ public class ProjectService : IDisposable
                 }
                 catch { /* Renderer busy 시 무시 */ }
             }
+
+            // 볼륨/속도/페이드가 기본값이 아니면 Rust Timeline에 전달
+            if (Math.Abs(clipModel.Volume - 1.0) > 0.001)
+                SetClipVolume(clipId, (float)clipModel.Volume);
+            if (Math.Abs(clipModel.Speed - 1.0) > 0.001)
+                SetClipSpeed(clipId, clipModel.Speed);
+            if (clipModel.FadeInMs > 0 || clipModel.FadeOutMs > 0)
+                SetClipFade(clipId, clipModel.FadeInMs, clipModel.FadeOutMs);
         }
 
         // 7) Markers 복원 (ViewModel만)
@@ -507,6 +542,10 @@ public class ProjectService : IDisposable
             Contrast = clip.Contrast,
             Saturation = clip.Saturation,
             Temperature = clip.Temperature,
+            Volume = clip.Volume,
+            Speed = clip.Speed,
+            FadeInMs = clip.FadeInMs,
+            FadeOutMs = clip.FadeOutMs,
             OpacityKeyframes = KeyframeSystemToDto(clip.OpacityKeyframes),
             VolumeKeyframes = KeyframeSystemToDto(clip.VolumeKeyframes),
             PositionXKeyframes = KeyframeSystemToDto(clip.PositionXKeyframes),
@@ -535,7 +574,11 @@ public class ProjectService : IDisposable
             Brightness = data.Brightness,
             Contrast = data.Contrast,
             Saturation = data.Saturation,
-            Temperature = data.Temperature
+            Temperature = data.Temperature,
+            Volume = data.Volume,
+            Speed = data.Speed,
+            FadeInMs = data.FadeInMs,
+            FadeOutMs = data.FadeOutMs
         };
 
         ApplyKeyframeSystemData(data.OpacityKeyframes, clip.OpacityKeyframes);

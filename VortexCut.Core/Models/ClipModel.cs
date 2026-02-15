@@ -81,6 +81,23 @@ public class ClipModel
     [DisplayName("색온도")]
     public double Temperature { get; set; } = 0.0;
 
+    // 오디오/속도 설정
+    [Category("오디오")]
+    [DisplayName("볼륨")]
+    public double Volume { get; set; } = 1.0;  // 0.0~2.0
+
+    [Category("오디오")]
+    [DisplayName("속도")]
+    public double Speed { get; set; } = 1.0;   // 0.25~4.0
+
+    [Category("오디오")]
+    [DisplayName("페이드 인 (ms)")]
+    public long FadeInMs { get; set; } = 0;
+
+    [Category("오디오")]
+    [DisplayName("페이드 아웃 (ms)")]
+    public long FadeOutMs { get; set; } = 0;
+
     // 키프레임 시스템 (After Effects 스타일) — 별도 키프레임 에디터에서 편집
     [Browsable(false)]
     public KeyframeSystem OpacityKeyframes { get; } = new KeyframeSystem();

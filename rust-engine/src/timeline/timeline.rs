@@ -169,7 +169,10 @@ impl Timeline {
                 duration_ms: video_clip.duration_ms,
                 trim_start_ms: video_clip.trim_start_ms,
                 trim_end_ms: video_clip.trim_end_ms,
-                volume: 1.0,
+                volume: video_clip.volume,
+                speed: video_clip.speed,
+                fade_in_ms: 0,
+                fade_out_ms: 0,
             });
         }
 

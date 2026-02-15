@@ -15,6 +15,28 @@ pub struct AudioMixer {
     decoder_cache: HashMap<String, AudioDecoder>,
 }
 
+/// Fade In/Out 볼륨 계산
+fn calc_fade_volume(clip: &AudioClip, timestamp_ms: i64) -> f32 {
+    let clip_time = timestamp_ms - clip.start_time_ms;
+    let clip_end_offset = clip.duration_ms;
+    let mut fade = 1.0f32;
+
+    // Fade in
+    if clip.fade_in_ms > 0 && clip_time < clip.fade_in_ms {
+        fade *= clip_time as f32 / clip.fade_in_ms as f32;
+    }
+
+    // Fade out
+    if clip.fade_out_ms > 0 {
+        let remaining = clip_end_offset - clip_time;
+        if remaining < clip.fade_out_ms {
+            fade *= remaining as f32 / clip.fade_out_ms as f32;
+        }
+    }
+
+    fade.clamp(0.0, 1.0)
+}
+
 impl AudioMixer {
     pub fn new() -> Self {
         Self {
@@ -47,9 +69,11 @@ impl AudioMixer {
                 continue;
             }
 
-            // 원본 파일에서의 시간 계산
+            // speed 기반 원본 파일 시간 계산
             let clip_offset = timestamp_ms - clip.start_time_ms;
-            let source_start = clip.trim_start_ms + clip_offset;
+            let source_start = clip.trim_start_ms + (clip_offset as f64 * clip.speed) as i64;
+            // speed에 따라 원본에서 더 많은/적은 구간 디코딩
+            let source_duration = duration_ms * clip.speed;
 
             let file_path = clip.file_path.to_string_lossy().to_string();
 
@@ -71,8 +95,8 @@ impl AudioMixer {
                 None => continue,
             };
 
-            // PCM 디코딩 (duration_ms를 f64로 전달 — i64 truncation하면 매 프레임 샘플 부족 → 노이즈)
-            let samples = match decoder.decode_range(source_start, duration_ms) {
+            // PCM 디코딩 (source_duration으로 원본 구간 디코딩)
+            let samples = match decoder.decode_range(source_start, source_duration) {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("[AUDIO_MIX] 디코딩 실패 {}: {}", file_path, e);
@@ -80,11 +104,38 @@ impl AudioMixer {
                 }
             };
 
-            // 볼륨 적용 + 합산
+            // 볼륨 + 페이드 적용 + 합산
             let volume = clip.volume;
-            let len = mixed.len().min(samples.len());
-            for i in 0..len {
-                mixed[i] += samples[i] * volume;
+            let fade = calc_fade_volume(clip, timestamp_ms);
+            let effective_volume = volume * fade;
+
+            if clip.speed == 1.0 {
+                // 속도 1.0: 디코딩된 샘플 직접 사용 (가장 효율적)
+                let len = mixed.len().min(samples.len());
+                for i in 0..len {
+                    mixed[i] += samples[i] * effective_volume;
+                }
+            } else {
+                // 속도 변경: 디코딩된 샘플을 리샘플링하여 출력 크기에 맞춤
+                // speed=2.0 → samples 2배 많음 → 2개를 1개로 축소 (피치 변화)
+                let out_len = mixed.len();
+                let src_len = samples.len();
+                if src_len == 0 { continue; }
+
+                for i in 0..out_len {
+                    // 선형 보간으로 리샘플링
+                    let src_pos = i as f64 * clip.speed;
+                    let src_idx = src_pos as usize;
+                    let frac = src_pos - src_idx as f64;
+
+                    if src_idx + 1 < src_len {
+                        let sample = samples[src_idx] * (1.0 - frac as f32)
+                            + samples[src_idx + 1] * frac as f32;
+                        mixed[i] += sample * effective_volume;
+                    } else if src_idx < src_len {
+                        mixed[i] += samples[src_idx] * effective_volume;
+                    }
+                }
             }
         }
 

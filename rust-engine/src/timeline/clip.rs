@@ -19,6 +19,8 @@ pub struct VideoClip {
     pub duration_ms: i64,       // 타임라인 상 지속 시간
     pub trim_start_ms: i64,     // 원본 파일에서 트림 시작
     pub trim_end_ms: i64,       // 원본 파일에서 트림 끝
+    pub volume: f32,            // 0.0~2.0, 기본 1.0 (비디오 파일 내 오디오 볼륨)
+    pub speed: f64,             // 0.25~4.0, 기본 1.0
 }
 
 impl VideoClip {
@@ -31,6 +33,8 @@ impl VideoClip {
             duration_ms,
             trim_start_ms: 0,
             trim_end_ms: duration_ms,
+            volume: 1.0,
+            speed: 1.0,
         }
     }
 
@@ -45,13 +49,14 @@ impl VideoClip {
     }
 
     /// 타임라인 시간을 원본 파일 시간으로 변환
+    /// speed=2.0이면 타임라인 1초에 원본 2초 재생
     pub fn timeline_to_source_time(&self, timeline_time_ms: i64) -> Option<i64> {
         if !self.contains_time(timeline_time_ms) {
             return None;
         }
 
         let offset = timeline_time_ms - self.start_time_ms;
-        Some(self.trim_start_ms + offset)
+        Some(self.trim_start_ms + (offset as f64 * self.speed) as i64)
     }
 }
 
@@ -64,7 +69,10 @@ pub struct AudioClip {
     pub duration_ms: i64,
     pub trim_start_ms: i64,
     pub trim_end_ms: i64,
-    pub volume: f32,  // 0.0 ~ 1.0
+    pub volume: f32,        // 0.0~2.0, 기본 1.0
+    pub speed: f64,          // 0.25~4.0, 기본 1.0
+    pub fade_in_ms: i64,     // 0 = 페이드 없음
+    pub fade_out_ms: i64,    // 0 = 페이드 없음
 }
 
 impl AudioClip {
@@ -78,6 +86,9 @@ impl AudioClip {
             trim_start_ms: 0,
             trim_end_ms: duration_ms,
             volume: 1.0,
+            speed: 1.0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
         }
     }
 

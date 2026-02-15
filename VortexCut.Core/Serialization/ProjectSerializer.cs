@@ -173,6 +173,19 @@ public class ClipData
     [JsonPropertyName("temperature")]
     public double Temperature { get; set; }
 
+    // 오디오/속도 설정
+    [JsonPropertyName("volume")]
+    public double Volume { get; set; } = 1.0;
+
+    [JsonPropertyName("speed")]
+    public double Speed { get; set; } = 1.0;
+
+    [JsonPropertyName("fadeInMs")]
+    public long FadeInMs { get; set; }
+
+    [JsonPropertyName("fadeOutMs")]
+    public long FadeOutMs { get; set; }
+
     [JsonPropertyName("opacityKeyframes")]
     public KeyframeSystemData OpacityKeyframes { get; set; } = new();
 

@@ -1,8 +1,8 @@
 # VortexCut 기술 명세서 (Technical Specification)
 
-> **작성일**: 2026-02-14
-> **버전**: 0.10.0 (색보정 이펙트 시스템)
-> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor
+> **작성일**: 2026-02-15
+> **버전**: 0.11.0 (오디오 볼륨/페이드 + 클립 속도 조절)
+> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절
 
 ## 1. 개요
 
@@ -188,7 +188,9 @@ public class TimelineHandle : SafeHandle {
 **기능:**
 - 프리뷰 재생 시 비디오와 동기화된 오디오 출력
 - 다중 트랙 오디오 믹싱 (비디오 트랙의 오디오 포함)
-- 볼륨 조정, soft clipping (tanh)
+- 클립별 볼륨 조정 (0~200%), soft clipping (tanh)
+- 클립별 속도 조절 (0.25x~4.0x, 선형 보간 리샘플링)
+- 페이드 인/아웃 (0~5000ms, 선형 볼륨 램프)
 - 스크럽 시 정확한 위치에서 재시작
 
 **구현:**
@@ -275,6 +277,46 @@ PreviewViewModel.RenderFrameAsync() → 즉시 프리뷰 갱신
 - 캐시된 프레임에 이펙트 포함 → 이펙트 변경 시 캐시 클리어
 - `is_default()` 검사로 기본값(0) 시 연산 건너뜀 (성능)
 - 프로젝트 저장/불러오기 시 이펙트 값 직렬화
+
+### 4.6 오디오 볼륨/페이드 + 클립 속도 조절 (Phase 10)
+
+**기능:**
+- Volume (볼륨): 클립별 0%~200% 볼륨 조절 (비디오/오디오 트랙 모두 지원)
+- Speed (속도): 0.25x~4.0x 재생 속도 조절 (선형 보간 리샘플링)
+- Fade In/Out: 0~5000ms 페이드 인/아웃 (선형 볼륨 램프)
+
+**구현:**
+- Rust 클립: [rust-engine/src/timeline/clip.rs](rust-engine/src/timeline/clip.rs) — VideoClip.volume/speed, AudioClip.speed/fade
+- Rust 믹서: [rust-engine/src/encoding/audio_mixer.rs](rust-engine/src/encoding/audio_mixer.rs) — speed 리샘플링 + fade 램프
+- FFI: [rust-engine/src/ffi/timeline.rs](rust-engine/src/ffi/timeline.rs) — set_clip_volume/speed/fade
+- Inspector UI: [VortexCut.UI/Views/InspectorView.axaml](VortexCut.UI/Views/InspectorView.axaml) — Audio 탭
+
+**아키텍처:**
+```
+Inspector Audio Tab (C#)
+    │ Volume Slider 0~200 → ClipModel 0.0~2.0
+    │ Speed Slider 25~400 → ClipModel 0.25~4.0
+    │ Fade Slider 0~5000 → ClipModel 직접 ms
+    │ → ProjectService.SetClipVolume/Speed/Fade()
+    ▼
+timeline_set_clip_volume/speed/fade() FFI
+    │ → Rust Timeline 순회 → clip 속성 갱신
+    ▼
+AudioMixer.mix_range()
+    │ source_start = trim_start + (offset * speed)
+    │ speed≠1.0: 선형 보간 리샘플링
+    │ effective_volume = volume * calc_fade_volume()
+    │ fade_in: 0→1 ramp (clip_time < fade_in_ms)
+    │ fade_out: 1→0 ramp (remaining < fade_out_ms)
+    ▼
+Output: mixed f32 PCM → cpal / Encoder
+```
+
+**핵심 설계:**
+- Speed 변경 시 피치도 변함 (MVP, 타임 스트레칭 미구현)
+- VideoClip.volume → `get_all_audio_sources_at_time()`에서 AudioClip.volume으로 전달
+- Speed 변경 시 `timeline_to_source_time()`도 speed 반영: `trim_start + offset * speed`
+- 프로젝트 저장/불러오기 시 Volume/Speed/Fade 직렬화 + Rust FFI 복원
 
 ### 4.5 전문가급 타임라인 기능 (Phase 2E)
 
@@ -763,6 +805,17 @@ dotnet build VortexCut.sln -c Release
 - [x] FFI: exporter_start_v3() + exporter_detect_encoders()
 - [x] ExportDialog 인코더 선택 ComboBox UI
 
+### Phase 10: 오디오 볼륨/페이드 + 클립 속도 조절 (완료 ✅ 2026-02-15)
+
+- [x] Rust VideoClip에 volume/speed 필드 추가, AudioClip에 speed/fade_in_ms/fade_out_ms 추가
+- [x] timeline_to_source_time() 속도 반영: `source = trim_start + offset * speed`
+- [x] AudioMixer 속도 기반 소스 시간 계산 + 선형 보간 리샘플링
+- [x] AudioMixer fade in/out 볼륨 램프 (calc_fade_volume)
+- [x] FFI: timeline_set_clip_volume / timeline_set_clip_speed / timeline_set_clip_fade
+- [x] C# NativeMethods + TimelineService + ProjectService 래퍼
+- [x] ClipModel Volume/Speed/FadeInMs/FadeOutMs 프로퍼티 + 직렬화
+- [x] Inspector Audio 탭 — Volume(0~200%), Speed(0.25x~4.0x), Fade(0~5000ms) 슬라이더
+
 ## 9. 테스트 전략
 
 ### 9.1 Rust 테스트
@@ -1022,7 +1075,7 @@ if (width * height * 4 > MAX_FRAME_SIZE) {
 
 ---
 
-**마지막 업데이트**: 2026-02-15 (Phase 9 완료: GPU 하드웨어 가속 인코딩)
+**마지막 업데이트**: 2026-02-15 (Phase 10 완료: 오디오 볼륨/페이드 + 클립 속도 조절)
 **작성자**: Claude Sonnet 4.5 / Claude Opus 4.6
-**Phase 9 구현 기간**: 2026-02-15 (1일)
-**Phase 9 추가 코드**: ~350 라인 (Rust EncoderType + FFI v3 + C# 서비스 + Export UI)
+**Phase 10 구현 기간**: 2026-02-15 (1일)
+**Phase 10 추가 코드**: ~500 라인 (Rust clip/mixer/FFI + C# Interop/Model/Serialization + Inspector Audio UI)

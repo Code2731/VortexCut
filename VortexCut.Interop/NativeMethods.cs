@@ -128,6 +128,27 @@ public static class NativeMethods
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int timeline_get_video_clip_count(IntPtr timeline, ulong trackId, out nuint outCount);
 
+    /// <summary>
+    /// 클립 볼륨 설정 (비디오/오디오 트랙 모두 검색)
+    /// volume: 0.0~2.0
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int timeline_set_clip_volume(IntPtr timeline, ulong clipId, float volume);
+
+    /// <summary>
+    /// 클립 속도 설정 (비디오/오디오 트랙 모두 검색)
+    /// speed: 0.25~4.0
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int timeline_set_clip_speed(IntPtr timeline, ulong clipId, double speed);
+
+    /// <summary>
+    /// 오디오 클립 페이드 설정
+    /// fadeInMs, fadeOutMs: 0 = 페이드 없음
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int timeline_set_clip_fade(IntPtr timeline, ulong clipId, long fadeInMs, long fadeOutMs);
+
     // ==================== Video Info Functions ====================
 
     /// <summary>
