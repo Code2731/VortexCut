@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VortexCut.Core.Models;
@@ -18,6 +19,42 @@ public partial class ProjectBinViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isLoading = false;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilteredMediaItems))]
+    [NotifyPropertyChangedFor(nameof(HasSearchText))]
+    private string _searchText = string.Empty;
+
+    /// <summary>
+    /// 검색 필터 적용된 미디어 목록
+    /// </summary>
+    public ObservableCollection<MediaItem> FilteredMediaItems
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SearchText))
+                return MediaItems;
+
+            var filtered = MediaItems
+                .Where(m => m.Name.Contains(SearchText, System.StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return new ObservableCollection<MediaItem>(filtered);
+        }
+    }
+
+    /// <summary>
+    /// 검색 텍스트 존재 여부 (X 버튼 표시용)
+    /// </summary>
+    public bool HasSearchText => !string.IsNullOrEmpty(SearchText);
+
+    /// <summary>
+    /// 검색 초기화
+    /// </summary>
+    [RelayCommand]
+    private void ClearSearch()
+    {
+        SearchText = string.Empty;
+    }
 
     /// <summary>
     /// 빈 상태 여부 (Empty State 표시용)
@@ -39,6 +76,7 @@ public partial class ProjectBinViewModel : ViewModelBase
         MediaItems.Add(item);
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(ShowLoadingOverlay));
+        OnPropertyChanged(nameof(FilteredMediaItems));
     }
 
     /// <summary>
@@ -51,6 +89,7 @@ public partial class ProjectBinViewModel : ViewModelBase
         {
             MediaItems.Remove(SelectedItem);
             SelectedItem = null;
+            OnPropertyChanged(nameof(FilteredMediaItems));
         }
     }
 
@@ -61,8 +100,10 @@ public partial class ProjectBinViewModel : ViewModelBase
     {
         MediaItems.Clear();
         SelectedItem = null;
+        SearchText = string.Empty;
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(ShowLoadingOverlay));
+        OnPropertyChanged(nameof(FilteredMediaItems));
     }
 
     /// <summary>

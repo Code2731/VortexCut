@@ -79,6 +79,14 @@ public class TrackModel
     [DisplayName("잠금")]
     public bool IsLocked { get; set; }
 
+    /// <summary>
+    /// 트랙 Armed 상태 (3-Point 편집 대상 트랙)
+    /// 같은 타입 중 1개만 armed 가능
+    /// </summary>
+    [Category("상태")]
+    [DisplayName("Armed")]
+    public bool IsArmed { get; set; }
+
     [Category("표시")]
     [DisplayName("색상 (ARGB)")]
     public uint ColorArgb { get; set; } = 0xFF808080; // Gray

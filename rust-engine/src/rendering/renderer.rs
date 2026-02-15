@@ -142,6 +142,8 @@ pub struct Renderer {
     export_resolution: Option<(u32, u32)>,
     /// 클립별 이펙트 파라미터
     clip_effects: HashMap<u64, EffectParams>,
+    /// 직전 프레임 렌더 소요 시간 (ms) — 적응형 프레임 스킵 판정용
+    last_render_elapsed_ms: u64,
     /// 진단 카운터 (매 30프레임마다 출력)
     diag_total: u64,
     diag_cache_hit: u64,
@@ -150,6 +152,8 @@ pub struct Renderer {
     diag_skipped: u64,
     diag_no_clip: u64,
     diag_error: u64,
+    diag_transition: u64,
+    diag_transition_skip: u64,
 }
 
 /// 검은색 프레임 생성 (기본 960x540, Export 시 지정 해상도)
@@ -198,6 +202,7 @@ impl Renderer {
             playback_mode: false,
             export_resolution: None,
             clip_effects: HashMap::new(),
+            last_render_elapsed_ms: 0,
             diag_total: 0,
             diag_cache_hit: 0,
             diag_decoded: 0,
@@ -205,6 +210,8 @@ impl Renderer {
             diag_skipped: 0,
             diag_no_clip: 0,
             diag_error: 0,
+            diag_transition: 0,
+            diag_transition_skip: 0,
         }
     }
 
@@ -222,6 +229,7 @@ impl Renderer {
             playback_mode: true, // forward decode 모드 (순차 접근)
             export_resolution: Some((width, height)),
             clip_effects: HashMap::new(),
+            last_render_elapsed_ms: 0,
             diag_total: 0,
             diag_cache_hit: 0,
             diag_decoded: 0,
@@ -229,6 +237,8 @@ impl Renderer {
             diag_skipped: 0,
             diag_no_clip: 0,
             diag_error: 0,
+            diag_transition: 0,
+            diag_transition_skip: 0,
         }
     }
 
@@ -286,7 +296,9 @@ impl Renderer {
                     }
                 }
 
-                self.frame_cache.put(file_path, source_time_ms, rendered.clone());
+                if !self.playback_mode {
+                    self.frame_cache.put(file_path, source_time_ms, rendered.clone());
+                }
                 Some(rendered)
             }
             _ => None,
@@ -298,12 +310,24 @@ impl Renderer {
         self.diag_total += 1;
         let render_start = std::time::Instant::now();
 
-        // Timeline 데이터 복사 (lock 최소화)
+        // Timeline 데이터 복사 (non-blocking lock → 오디오 fill thread와 경합 시 프레임 스킵)
+        // 최적화: 최상위 트랙 클립 1개만 clone (멀티트랙에서 불필요한 clone 제거)
         let (clips_to_render, transitions) = {
-            let timeline = self.timeline.lock()
-                .map_err(|e| format!("Failed to lock timeline: {}", e))?;
+            let timeline = match self.timeline.try_lock() {
+                Ok(tl) => tl,
+                Err(_) => {
+                    // Timeline busy (오디오 fill thread가 lock 보유 중) → 프레임 스킵
+                    self.diag_skipped += 1;
+                    return Ok(self.last_rendered_frame.clone().unwrap_or_else(|| {
+                        match self.export_resolution {
+                            Some((w, h)) => black_frame_yuv(w, h, timestamp_ms),
+                            None => black_frame(timestamp_ms),
+                        }
+                    }));
+                }
+            };
 
-            let mut clips = Vec::new();
+            let mut clips: Vec<(crate::timeline::VideoClip, i64)> = Vec::with_capacity(1);
             let mut transitions: Vec<TransitionInfo> = Vec::new();
 
             for track in &timeline.video_tracks {
@@ -314,9 +338,12 @@ impl Renderer {
                 // 트랜지션 먼저 확인 (겹치는 2클립)
                 if let Some(info) = track.get_transition_at_time(timestamp_ms) {
                     transitions.push(info);
-                } else if let Some(clip) = track.get_clip_at_time(timestamp_ms) {
-                    if let Some(source_time_ms) = clip.timeline_to_source_time(timestamp_ms) {
-                        clips.push((clip.clone(), source_time_ms));
+                } else if clips.is_empty() {
+                    // 최상위 트랙 클립만 수집 (이미 찾았으면 건너뜀)
+                    if let Some(clip) = track.get_clip_at_time(timestamp_ms) {
+                        if let Some(source_time_ms) = clip.timeline_to_source_time(timestamp_ms) {
+                            clips.push((clip.clone(), source_time_ms));
+                        }
                     }
                 }
             }
@@ -337,12 +364,31 @@ impl Renderer {
         // 트랜지션 처리 (있으면 우선)
         if !transitions.is_empty() {
             let info = &transitions[0];
+
+            // 적응형 프레임 스킵: 직전 프레임이 28ms 이상 걸렸으면
+            // 트랜지션(2x 디코딩) 대신 이전 프레임 재사용 → 프레임 지연 누적 방지
+            // Export는 스킵하지 않음 (품질 우선)
+            if self.playback_mode && self.export_resolution.is_none()
+                && self.last_render_elapsed_ms > 28
+            {
+                if let Some(ref frame) = self.last_rendered_frame {
+                    let mut skipped = frame.clone();
+                    skipped.timestamp_ms = timestamp_ms;
+                    self.diag_transition_skip += 1;
+                    self.last_render_elapsed_ms = 0; // 다음 프레임은 렌더
+                    self.print_diag_if_needed(timestamp_ms);
+                    return Ok(skipped);
+                }
+            }
+
             let out_src = info.outgoing.timeline_to_source_time(timestamp_ms);
             let in_src = info.incoming.timeline_to_source_time(timestamp_ms);
 
             if let (Some(out_src), Some(in_src)) = (out_src, in_src) {
-                let out_frame = self.decode_and_render_clip(&info.outgoing.clone(), out_src, timestamp_ms);
-                let in_frame = self.decode_and_render_clip(&info.incoming.clone(), in_src, timestamp_ms);
+                // .clone() 제거: info.outgoing/incoming은 TransitionInfo 내 소유 데이터
+                // decode_and_render_clip은 &VideoClip만 필요 → 불필요한 PathBuf clone 제거
+                let out_frame = self.decode_and_render_clip(&info.outgoing, out_src, timestamp_ms);
+                let in_frame = self.decode_and_render_clip(&info.incoming, in_src, timestamp_ms);
 
                 if let (Some(mut out_f), Some(in_f)) = (out_frame, in_frame) {
                     // RGBA 블렌딩
@@ -362,10 +408,13 @@ impl Renderer {
                         out_f.is_yuv = true;
                     }
 
-                    self.last_rendered_frame = Some(out_f.clone());
-                    self.diag_decoded += 1;
+                    // clone+move 패턴: return용 clone 1회, last_rendered에 move
+                    let return_frame = out_f.clone();
+                    self.last_rendered_frame = Some(out_f);
+                    self.diag_transition += 1;
+                    self.last_render_elapsed_ms = render_start.elapsed().as_millis() as u64;
                     self.print_diag_if_needed(timestamp_ms);
-                    return Ok(out_f);
+                    return Ok(return_frame);
                 }
             }
         }
@@ -425,11 +474,16 @@ impl Renderer {
                                 }
                             }
                         }
-                        // 캐시에 저장
-                        self.frame_cache.put(file_path, *source_time_ms, rendered.clone());
-                        self.last_rendered_frame = Some(rendered.clone());
+                        // 캐시 저장: 재생 모드에서는 건너뜀 (순차 프레임 = 캐시 히트 없음, clone 2MB 낭비 방지)
+                        if !self.playback_mode {
+                            self.frame_cache.put(file_path, *source_time_ms, rendered.clone());
+                        }
+                        // last_rendered: clone 대신 반환 프레임을 clone하고 원본은 move
+                        let return_frame = rendered.clone();
+                        self.last_rendered_frame = Some(rendered);
+                        self.last_render_elapsed_ms = render_start.elapsed().as_millis() as u64;
                         self.print_diag_if_needed(timestamp_ms);
-                        Ok(rendered)
+                        Ok(return_frame)
                     }
                     DecodeResult::FrameSkipped => {
                         self.diag_skipped += 1;
@@ -453,8 +507,9 @@ impl Renderer {
                             timestamp_ms,
                             is_yuv,
                         };
-                        self.last_rendered_frame = Some(rendered.clone());
-                        Ok(rendered)
+                        let return_frame = rendered.clone();
+                        self.last_rendered_frame = Some(rendered);
+                        Ok(return_frame)
                     }
                     DecodeResult::EndOfStreamEmpty => {
                         self.diag_eof += 1;
@@ -487,15 +542,18 @@ impl Renderer {
     fn print_diag_if_needed(&self, last_ts: i64) {
         if self.diag_total % 30 == 0 {
             eprintln!(
-                "[RENDER DIAG] t={}ms | total={} cache={} decode={} eof={} skip={} noclip={} err={}",
+                "[RENDER DIAG] t={}ms | total={} cache={} decode={} trans={} trans_skip={} eof={} skip={} noclip={} err={} last={}ms",
                 last_ts,
                 self.diag_total,
                 self.diag_cache_hit,
                 self.diag_decoded,
+                self.diag_transition,
+                self.diag_transition_skip,
                 self.diag_eof,
                 self.diag_skipped,
                 self.diag_no_clip,
-                self.diag_error
+                self.diag_error,
+                self.last_render_elapsed_ms
             );
         }
     }

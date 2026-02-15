@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using System.Linq;
 using VortexCut.Core.Models;
@@ -112,8 +113,8 @@ public partial class ClipCanvasPanel
         // 트랙 배경
         DrawTrackBackgrounds(context);
 
-        // Snap 가이드라인 (드래그 중일 때)
-        if (_isDragging && _lastSnappedTimeMs >= 0)
+        // Snap 가이드라인 (드래그 또는 트림 중일 때)
+        if ((_isDragging || _isTrimming) && _lastSnappedTimeMs >= 0)
         {
             DrawSnapGuideline(context, _lastSnappedTimeMs);
         }
@@ -121,11 +122,35 @@ public partial class ClipCanvasPanel
         // 클립들
         DrawClips(context);
 
+        // 트림 중 고스트 아웃라인 (원본 범위 표시)
+        if (_isTrimming && _draggingClip != null && _draggingClip.SourceDurationMs > 0)
+        {
+            DrawGhostOutline(context, _draggingClip);
+        }
+
         // 링크된 클립 연결선 (비디오+오디오)
         DrawLinkedClipConnections(context);
 
         // Playhead
         DrawPlayhead(context);
+
+        // 호버 썸네일 프리뷰
+        if (_hoverThumbnailVisible && _hoverThumbnailBitmap != null)
+        {
+            DrawHoverThumbnailPreview(context);
+        }
+
+        // 트림 프리뷰 오버레이
+        if (_trimPreviewVisible && _trimPreviewBitmap != null && _isTrimming && _draggingClip != null)
+        {
+            DrawTrimPreviewOverlay(context, _draggingClip);
+        }
+
+        // Swifter 스크럽 썸네일 그리드
+        if (_scrubGridVisible && _isScrubbing)
+        {
+            DrawScrubGrid(context);
+        }
 
         // 성능 정보 (FPS, 클립 개수 - 우측 하단)
         DrawPerformanceInfo(context);
@@ -162,6 +187,13 @@ public partial class ClipCanvasPanel
             if (track.IsLocked)
             {
                 DrawLockedTrackOverlay(context, trackRect);
+            }
+
+            // Armed 트랙 좌측 주황 바
+            if (track.IsArmed)
+            {
+                var armBar = new Rect(0, y, 3, track.Height);
+                context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 230, 126, 34)), armBar);
             }
         }
 
@@ -238,6 +270,13 @@ public partial class ClipCanvasPanel
             if (track.IsLocked)
             {
                 DrawLockedTrackOverlay(context, trackRect);
+            }
+
+            // Armed 트랙 좌측 주황 바
+            if (track.IsArmed)
+            {
+                var armBar = new Rect(0, y, 3, track.Height);
+                context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 230, 126, 34)), armBar);
             }
         }
 
@@ -601,6 +640,284 @@ public partial class ClipCanvasPanel
                 context.DrawText(
                     formattedText,
                     new Point(x - formattedText.Width / 2, 33));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 호버 썸네일 프리뷰 렌더링 (클립 위 160x90 팝업)
+    /// </summary>
+    private void DrawHoverThumbnailPreview(DrawingContext context)
+    {
+        if (_hoverThumbnailBitmap == null) return;
+
+        const double thumbWidth = 160;
+        const double thumbHeight = 90;
+        const double padding = 4;
+        const double labelHeight = 18;
+        const double shadowOffset = 3;
+
+        // 팝업 위치: 마우스 위 + 약간 위로
+        double popupWidth = thumbWidth + padding * 2;
+        double popupHeight = thumbHeight + labelHeight + padding * 2;
+        double popupX = _hoverThumbnailPos.X - popupWidth / 2;
+        double popupY = _hoverThumbnailPos.Y - popupHeight - 12;
+
+        // 화면 밖으로 나가지 않도록 클램프
+        popupX = Math.Clamp(popupX, 2, Bounds.Width - popupWidth - 2);
+        popupY = Math.Max(2, popupY);
+
+        var popupRect = new Rect(popupX, popupY, popupWidth, popupHeight);
+
+        // 그림자
+        var shadowRect = new Rect(popupX + shadowOffset, popupY + shadowOffset, popupWidth, popupHeight);
+        context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(80, 0, 0, 0)), shadowRect);
+
+        // 배경
+        context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(240, 30, 30, 35)), popupRect);
+
+        // 썸네일 이미지
+        var imageRect = new Rect(popupX + padding, popupY + padding, thumbWidth, thumbHeight);
+        context.DrawImage(_hoverThumbnailBitmap, imageRect);
+
+        // 테두리
+        context.DrawRectangle(null, RenderResourceCache.GetPen(Color.FromArgb(180, 100, 100, 110), 1), popupRect);
+
+        // 시간 라벨
+        string timeLabel = FormatSMPTETimecode(_hoverThumbnailTimeMs);
+        var formattedTime = new FormattedText(
+            timeLabel,
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            RenderResourceCache.Consolas,
+            10,
+            RenderResourceCache.WhiteBrush);
+
+        context.DrawText(formattedTime,
+            new Point(popupX + (popupWidth - formattedTime.Width) / 2,
+                       popupY + padding + thumbHeight + 2));
+    }
+
+    /// <summary>
+    /// Swifter 스크럽 썸네일 그리드 (4x2)
+    /// </summary>
+    private void DrawScrubGrid(DrawingContext context)
+    {
+        const double cellWidth = 120;
+        const double cellHeight = 68;
+        const double cellPadding = 3;
+        const double labelHeight = 14;
+        const int cols = 4;
+        const int rows = 2;
+        const double gridPadding = 6;
+
+        double gridWidth = cols * (cellWidth + cellPadding) - cellPadding + gridPadding * 2;
+        double gridHeight = rows * (cellHeight + labelHeight + cellPadding) - cellPadding + gridPadding * 2;
+
+        // 그리드 위치: 화면 상단 중앙
+        double gridX = (Bounds.Width - gridWidth) / 2;
+        double gridY = Math.Max(4, _scrubGridY - gridHeight - 16);
+
+        // 배경
+        var bgRect = new Rect(gridX, gridY, gridWidth, gridHeight);
+        context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 20, 20, 25)), bgRect);
+        context.DrawRectangle(null, RenderResourceCache.GetPen(Color.FromArgb(150, 80, 80, 90), 1), bgRect);
+
+        // 셀 렌더링
+        for (int i = 0; i < 8; i++)
+        {
+            int col = i % cols;
+            int row = i / cols;
+
+            double cellX = gridX + gridPadding + col * (cellWidth + cellPadding);
+            double cellY = gridY + gridPadding + row * (cellHeight + labelHeight + cellPadding);
+
+            // 썸네일
+            var imageRect = new Rect(cellX, cellY, cellWidth, cellHeight);
+            if (_scrubGridBitmaps[i] != null)
+            {
+                context.DrawImage(_scrubGridBitmaps[i]!, imageRect);
+            }
+            else
+            {
+                context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(60, 40, 40, 40)), imageRect);
+            }
+
+            // 현재 위치 하이라이트 (인덱스 3 = 현재)
+            if (i == 3)
+            {
+                context.DrawRectangle(null, RenderResourceCache.GetPen(Color.FromArgb(220, 255, 200, 80), 2), imageRect);
+            }
+            else
+            {
+                context.DrawRectangle(null, RenderResourceCache.GetPen(Color.FromArgb(80, 100, 100, 110), 0.5), imageRect);
+            }
+
+            // 시간 라벨
+            long timeMs = _scrubGridTimeMs[i];
+            string timeLabel = FormatTime(Math.Max(0, timeMs));
+            var formattedTime = new FormattedText(
+                timeLabel,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                RenderResourceCache.Consolas,
+                8,
+                i == 3 ? RenderResourceCache.GetSolidBrush(Color.FromArgb(255, 255, 200, 80))
+                       : RenderResourceCache.GetSolidBrush(Color.FromArgb(160, 180, 180, 180)));
+
+            context.DrawText(formattedTime,
+                new Point(cellX + (cellWidth - formattedTime.Width) / 2, cellY + cellHeight + 1));
+        }
+    }
+
+    /// <summary>
+    /// 트림 중 에지 프레임 프리뷰 오버레이 (클립 위 160x90)
+    /// </summary>
+    private void DrawTrimPreviewOverlay(DrawingContext context, ClipModel clip)
+    {
+        if (_trimPreviewBitmap == null) return;
+
+        const double thumbWidth = 160;
+        const double thumbHeight = 90;
+        const double padding = 4;
+        const double labelHeight = 18;
+        const double shadowOffset = 3;
+
+        // 프리뷰 위치: 트림 에지 위 중앙
+        double edgeX = _trimEdge == ClipEdge.Left
+            ? TimeToX(clip.StartTimeMs)
+            : TimeToX(clip.StartTimeMs + clip.DurationMs);
+
+        double trackY = GetTrackYPosition(clip.TrackIndex);
+
+        double popupWidth = thumbWidth + padding * 2;
+        double popupHeight = thumbHeight + labelHeight + padding * 2;
+        double popupX = edgeX - popupWidth / 2;
+        double popupY = trackY - popupHeight - 8;
+
+        // 화면 밖 보정
+        popupX = Math.Clamp(popupX, 2, Bounds.Width - popupWidth - 2);
+        popupY = Math.Max(2, popupY);
+
+        var popupRect = new Rect(popupX, popupY, popupWidth, popupHeight);
+
+        // 그림자
+        var shadowRect = new Rect(popupX + shadowOffset, popupY + shadowOffset, popupWidth, popupHeight);
+        context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(80, 0, 0, 0)), shadowRect);
+
+        // 배경 (주황 틴트)
+        context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(240, 40, 32, 25)), popupRect);
+
+        // 썸네일 이미지
+        var imageRect = new Rect(popupX + padding, popupY + padding, thumbWidth, thumbHeight);
+        context.DrawImage(_trimPreviewBitmap, imageRect);
+
+        // 테두리 (주황)
+        context.DrawRectangle(null, RenderResourceCache.GetPen(Color.FromArgb(200, 230, 126, 34), 1.5), popupRect);
+
+        // 시간 라벨
+        string edgeLabel = _trimEdge == ClipEdge.Left ? "IN" : "OUT";
+        string timeLabel = $"{edgeLabel}: {FormatSMPTETimecode(_trimPreviewTimeMs)}";
+        var formattedTime = new FormattedText(
+            timeLabel,
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            RenderResourceCache.Consolas,
+            10,
+            RenderResourceCache.WhiteBrush);
+
+        context.DrawText(formattedTime,
+            new Point(popupX + (popupWidth - formattedTime.Width) / 2,
+                       popupY + padding + thumbHeight + 2));
+    }
+
+    /// <summary>
+    /// 트림 중 원본 소스 범위를 점선 아웃라인으로 표시 (고스트 아웃라인)
+    /// 사용자가 얼마나 더 확장 가능한지 시각적으로 보여줌
+    /// </summary>
+    private void DrawGhostOutline(DrawingContext context, ClipModel clip)
+    {
+        var track = GetTrackByIndex(clip.TrackIndex);
+        if (track == null) return;
+
+        double trackY = GetTrackYPosition(clip.TrackIndex);
+        double trackHeight = track.Height;
+
+        // 현재 클립 위치
+        double clipX = TimeToX(clip.StartTimeMs);
+        double clipWidth = DurationToWidth(clip.DurationMs);
+
+        // 원본 전체 범위 계산
+        // 원본 시작: 현재 StartTimeMs에서 TrimStartMs만큼 뒤로
+        long originalStartMs = clip.StartTimeMs - clip.TrimStartMs;
+        // 원본 끝: 원본 시작 + 전체 소스 길이
+        long originalEndMs = originalStartMs + clip.SourceDurationMs;
+
+        double originalX = TimeToX(originalStartMs);
+        double originalEndX = TimeToX(originalEndMs);
+        double originalWidth = originalEndX - originalX;
+
+        // 원본 범위가 현재 클립과 같으면 표시 안함
+        if (clip.TrimStartMs <= 0 && clip.SourceDurationMs <= clip.DurationMs + clip.TrimStartMs)
+            return;
+
+        const double margin = 2;
+
+        // 왼쪽 확장 가능 영역 (TrimStartMs > 0이면)
+        if (clip.TrimStartMs > 0)
+        {
+            double leftGhostX = originalX;
+            double leftGhostWidth = clipX - originalX;
+            if (leftGhostWidth > 1)
+            {
+                var leftRect = new Rect(leftGhostX, trackY + margin, leftGhostWidth, trackHeight - margin * 2);
+                context.FillRectangle(RenderResourceCache.GhostFillBrush, leftRect);
+                context.DrawRectangle(null, RenderResourceCache.GhostOutlinePen, leftRect);
+
+                // 확장 가능 시간 표시
+                long leftExtentMs = clip.TrimStartMs;
+                if (leftGhostWidth > 40)
+                {
+                    var timeText = new FormattedText(
+                        $"-{FormatTime(leftExtentMs)}",
+                        System.Globalization.CultureInfo.CurrentCulture,
+                        FlowDirection.LeftToRight,
+                        RenderResourceCache.SegoeUI,
+                        9,
+                        RenderResourceCache.GetSolidBrush(Color.FromArgb(160, 255, 200, 80)));
+                    context.DrawText(timeText,
+                        new Point(leftGhostX + (leftGhostWidth - timeText.Width) / 2,
+                                  trackY + (trackHeight - timeText.Height) / 2));
+                }
+            }
+        }
+
+        // 오른쪽 확장 가능 영역
+        long rightExtentMs = clip.SourceDurationMs - clip.TrimStartMs - clip.DurationMs;
+        if (rightExtentMs > 0)
+        {
+            double rightGhostX = clipX + clipWidth;
+            double rightGhostWidth = DurationToWidth(rightExtentMs);
+            if (rightGhostWidth > 1)
+            {
+                var rightRect = new Rect(rightGhostX, trackY + margin, rightGhostWidth, trackHeight - margin * 2);
+                context.FillRectangle(RenderResourceCache.GhostFillBrush, rightRect);
+                context.DrawRectangle(null, RenderResourceCache.GhostOutlinePen, rightRect);
+
+                // 확장 가능 시간 표시
+                if (rightGhostWidth > 40)
+                {
+                    var timeText = new FormattedText(
+                        $"+{FormatTime(rightExtentMs)}",
+                        System.Globalization.CultureInfo.CurrentCulture,
+                        FlowDirection.LeftToRight,
+                        RenderResourceCache.SegoeUI,
+                        9,
+                        RenderResourceCache.GetSolidBrush(Color.FromArgb(160, 255, 200, 80)));
+                    context.DrawText(timeText,
+                        new Point(rightGhostX + (rightGhostWidth - timeText.Width) / 2,
+                                  trackY + (trackHeight - timeText.Height) / 2));
+                }
             }
         }
     }

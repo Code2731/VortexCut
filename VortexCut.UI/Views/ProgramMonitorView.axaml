@@ -77,6 +77,14 @@
                     </Button>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                    <Button Classes="ToolButton" ToolTip.Tip="Playback Speed (click to cycle)"
+                            Width="40" Height="28"
+                            Command="{Binding Preview.CyclePlaybackSpeedCommand}">
+                        <TextBlock Text="{Binding Preview.SpeedDisplayText}"
+                                   FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   VerticalAlignment="Center"/>
+                    </Button>
                     <Button Classes="ToolButton" ToolTip.Tip="Settings" Width="32" Height="28">
                         <mi:MaterialIcon Kind="Cog" Width="14" Height="14" Foreground="{StaticResource TextSecondaryBrush}"/>
                     </Button>

@@ -23,10 +23,15 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     // Stopwatch 기반 플레이백 클럭 (누적 오차 방지)
     private readonly System.Diagnostics.Stopwatch _playbackClock = new();
     private long _playbackStartTimeMs; // 재생 시작 시점의 타임라인 위치
+    private long _playbackMaxEndTimeMs; // 재생 시작 시 계산된 클립 끝 시간 (매 틱 반복 계산 방지)
 
     // 단일 렌더 슬롯: 동시에 하나의 렌더만 진행 → Mutex 경합 방지
     // 0=idle, 1=active. Interlocked.CompareExchange로 원자적 전환
     private int _playbackRenderActive = 0;
+
+    // 타임라인 업데이트 쓰로틀: ClipCanvasPanel 재그리기 빈도 제한
+    // 30fps 재그리기는 UI 스레드 과부하 → 10fps로 제한 (100ms 간격)
+    private long _lastTimelineUpdateMs = 0;
 
     // 스크럽 렌더 슬롯: 스크럽도 동시 1개만 실행 → try_lock 경합 + FFmpeg 재진입 방지
     private int _scrubRenderActive = 0;
@@ -64,6 +69,19 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     private bool _isLoading = false;
 
+    // FPS 측정용
+    private int _frameCount = 0;
+    private System.Diagnostics.Stopwatch _fpsStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FpsDisplay))]
+    private double _currentFps = 0.0;
+
+    /// <summary>
+    /// FPS 표시용 (소수점 1자리)
+    /// </summary>
+    public string FpsDisplay => $"{CurrentFps:F1}";
+
     /// <summary>
     /// 현재 시간에 표시할 자막 텍스트 (없으면 null)
     /// </summary>
@@ -83,6 +101,29 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(CurrentSubtitleText));
         OnPropertyChanged(nameof(HasSubtitle));
+    }
+
+    // 재생 속도 (0.25x ~ 4x)
+    private static readonly double[] SpeedSteps = { 0.25, 0.5, 1.0, 1.5, 2.0, 4.0 };
+    private int _speedIndex = 2; // 기본 1.0x
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SpeedDisplayText))]
+    private double _playbackSpeed = 1.0;
+
+    /// <summary>
+    /// 속도 표시 텍스트 (버튼용)
+    /// </summary>
+    public string SpeedDisplayText => $"{PlaybackSpeed}x";
+
+    /// <summary>
+    /// 재생 속도 순환 (0.25x → 0.5x → 1x → 1.5x → 2x → 4x → 0.25x)
+    /// </summary>
+    [RelayCommand]
+    private void CyclePlaybackSpeed()
+    {
+        _speedIndex = (_speedIndex + 1) % SpeedSteps.Length;
+        PlaybackSpeed = SpeedSteps[_speedIndex];
     }
 
     public PreviewViewModel(IProjectService projectService, IAudioPlaybackService audioPlayback)
@@ -151,7 +192,7 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
                         using var frame = _projectService.RenderFrame(ts);
                         if (frame != null)
                         {
-                            frameData = frame.Data.ToArray();
+                            frameData = frame.Data; // ToArray() 제거 — 이미 관리 메모리 byte[], 추가 할당 불필요
                             width = frame.Width;
                             height = frame.Height;
                         }
@@ -214,7 +255,7 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
                     using var frame = _projectService.RenderFrame(timestampMs);
                     if (frame != null)
                     {
-                        frameData = frame.Data.ToArray();
+                        frameData = frame.Data; // ToArray() 제거 — 이미 관리 메모리 byte[], 추가 할당 불필요
                         width = frame.Width;
                         height = frame.Height;
                     }
@@ -284,6 +325,16 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
             }
         }
 
+        // FPS 측정
+        _frameCount++;
+        var fpsElapsed = _fpsStopwatch.ElapsedMilliseconds;
+        if (fpsElapsed >= 1000)
+        {
+            CurrentFps = _frameCount * 1000.0 / fpsElapsed;
+            _frameCount = 0;
+            _fpsStopwatch.Restart();
+        }
+
         // 항상 다른 객체 참조 → Avalonia가 새 이미지로 인식하여 렌더링
         PreviewImage = target;
     }
@@ -302,6 +353,9 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
             _audioPlayback.Stop(); // 오디오 정지 (매번 새로 시작하여 동기화 보장)
             _projectService.SetPlaybackMode(false); // 스크럽 모드로 전환
             IsPlaying = false;
+            // 정지 시 타임라인 시간 확실히 동기화 (쓰로틀로 누락될 수 있으므로)
+            if (_timelineViewModel != null)
+                _timelineViewModel.CurrentTimeMs = CurrentTimeMs;
             Services.DebugLogger.Log("[PLAY] Stopped");
         }
         else
@@ -319,18 +373,18 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
                 CurrentTimeMs = _timelineViewModel.CurrentTimeMs;
             }
 
-            // maxEndTime 계산
-            long maxEndTime = 0;
+            // maxEndTime 계산 (재생 시작 시 1회만, 캐시하여 매 틱 반복 계산 방지)
+            _playbackMaxEndTimeMs = 0;
             foreach (var clip in _timelineViewModel!.Clips)
             {
                 var clipEnd = clip.StartTimeMs + clip.DurationMs;
-                if (clipEnd > maxEndTime) maxEndTime = clipEnd;
+                if (clipEnd > _playbackMaxEndTimeMs) _playbackMaxEndTimeMs = clipEnd;
             }
 
-            Services.DebugLogger.Log($"[PLAY] CurrentTimeMs={CurrentTimeMs}, maxEndTime={maxEndTime}, remaining={maxEndTime - CurrentTimeMs}ms");
+            Services.DebugLogger.Log($"[PLAY] CurrentTimeMs={CurrentTimeMs}, maxEndTime={_playbackMaxEndTimeMs}, remaining={_playbackMaxEndTimeMs - CurrentTimeMs}ms");
 
             // 영상 끝 근처(500ms 이내)에서 재생 시 → 자동으로 처음부터 재생 (표준 NLE 동작)
-            if (CurrentTimeMs >= maxEndTime - 500)
+            if (CurrentTimeMs >= _playbackMaxEndTimeMs - 500)
             {
                 Services.DebugLogger.Log($"[PLAY] Near end, wrapping to 0");
                 CurrentTimeMs = 0;
@@ -342,8 +396,11 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
             Interlocked.Exchange(ref _playbackRenderActive, 0); // 렌더 슬롯 초기화
             _projectService.SetPlaybackMode(true); // 재생 모드로 전환 (forward_threshold=5000ms)
 
-            // 오디오 재생 시작 (항상 현재 위치에서 새로 시작 → 비디오와 동기화 보장)
-            _audioPlayback.Start(_projectService.TimelineRawHandle, _playbackStartTimeMs);
+            // 오디오 재생 시작 (1.0x 속도일 때만, 그 외에는 뮤트)
+            if (Math.Abs(PlaybackSpeed - 1.0) < 0.01)
+                _audioPlayback.Start(_projectService.TimelineRawHandle, _playbackStartTimeMs);
+            else
+                _audioPlayback.Stop();
 
             _playbackClock.Restart();
             _playbackTimer.Start();
@@ -361,41 +418,37 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void OnPlaybackTick(object? sender, ElapsedEventArgs e)
     {
-        // Stopwatch 기반 실제 경과 시간 계산 (누적 오차 없음)
-        var newTimeMs = _playbackStartTimeMs + _playbackClock.ElapsedMilliseconds;
+        // Stopwatch 기반 실제 경과 시간 계산 (속도 배율 적용)
+        var newTimeMs = _playbackStartTimeMs + (long)(_playbackClock.ElapsedMilliseconds * PlaybackSpeed);
 
-        // 클립 끝 감지: 재생 시간이 모든 클립의 끝을 넘으면 정지
-        if (_timelineViewModel != null && _timelineViewModel.Clips.Count > 0)
+        // 클립 끝 감지: 캐시된 maxEndTime 사용 (매 틱 O(n) 반복 제거)
+        if (newTimeMs >= _playbackMaxEndTimeMs && _playbackMaxEndTimeMs > 0)
         {
-            long maxEndTime = 0;
-            foreach (var clip in _timelineViewModel.Clips)
+            _playbackTimer.Stop();
+            _playbackClock.Stop();
+            _audioPlayback.Stop(); // 오디오 정지
+            _projectService.SetPlaybackMode(false); // 스크럽 모드로 복귀
+            var endTime = _playbackMaxEndTimeMs;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                var clipEnd = clip.StartTimeMs + clip.DurationMs;
-                if (clipEnd > maxEndTime) maxEndTime = clipEnd;
-            }
-
-            if (newTimeMs >= maxEndTime)
-            {
-                _playbackTimer.Stop();
-                _playbackClock.Stop();
-                _audioPlayback.Stop(); // 오디오 정지
-                _projectService.SetPlaybackMode(false); // 스크럽 모드로 복귀
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    IsPlaying = false;
-                    CurrentTimeMs = maxEndTime;
-                    if (_timelineViewModel != null)
-                        _timelineViewModel.CurrentTimeMs = maxEndTime;
-                });
-                return;
-            }
+                IsPlaying = false;
+                CurrentTimeMs = endTime;
+                if (_timelineViewModel != null)
+                    _timelineViewModel.CurrentTimeMs = endTime;
+            });
+            return;
         }
 
         // 타임라인 시간 업데이트 (UI 스레드)
+        // 쓰로틀: TimelineViewModel.CurrentTimeMs는 100ms 간격으로만 갱신
+        // → ClipCanvasPanel 재그리기 빈도 30fps→10fps로 감소 (UI 스레드 부하 대폭 절감)
+        var shouldUpdateTimeline = (newTimeMs - _lastTimelineUpdateMs) >= 100;
+        if (shouldUpdateTimeline) _lastTimelineUpdateMs = newTimeMs;
+
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             CurrentTimeMs = newTimeMs;
-            if (_timelineViewModel != null)
+            if (_timelineViewModel != null && shouldUpdateTimeline)
             {
                 _timelineViewModel.CurrentTimeMs = newTimeMs;
             }

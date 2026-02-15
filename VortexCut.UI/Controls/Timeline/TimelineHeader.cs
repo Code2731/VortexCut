@@ -205,6 +205,50 @@ public class TimelineHeader : Control
                 new Point(x, HeaderHeight - 2));
         }
 
+        // 서브소눈금 점 (고줌 전용 — IMG.LY 스타일)
+        if (_pixelsPerMs > 0.3)
+        {
+            long subMinorMs = minorIntervalMs / 2;
+            if (subMinorMs >= 5)
+            {
+                long firstSub = (visibleStartMs / subMinorMs) * subMinorMs;
+                for (long t = firstSub; t <= visibleEndMs; t += subMinorMs)
+                {
+                    if (t % minorIntervalMs == 0) continue; // 소눈금과 겹치면 스킵
+                    double sx = TimeToX(t);
+                    if (sx < TrackHeaderWidth - 5 || sx > Bounds.Width) continue;
+                    context.DrawEllipse(
+                        RenderResourceCache.SubMinorTickDotBrush, null,
+                        new Point(sx, HeaderHeight - 4), 1.2, 1.2);
+                }
+            }
+        }
+
+        // 프레임 번호 표시 (초고줌 전용)
+        if (_pixelsPerMs > 0.5 && _viewModel != null)
+        {
+            double fps = 30.0; // 기본 30fps
+            long frameIntervalMs = Math.Max(1, (long)(1000.0 / fps));
+            long firstFrame = (visibleStartMs / frameIntervalMs) * frameIntervalMs;
+            double lastFrameX = -100;
+            for (long t = firstFrame; t <= visibleEndMs; t += frameIntervalMs)
+            {
+                if (t % majorIntervalMs == 0) continue;
+                double fx = TimeToX(t);
+                if (fx < TrackHeaderWidth - 5 || fx > Bounds.Width) continue;
+                if (fx - lastFrameX < 20) continue; // 겹침 방지
+                int frameNum = (int)((t * fps / 1000.0) % fps);
+                var frameText = new FormattedText(
+                    $":{frameNum:D2}",
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    RenderResourceCache.SegoeUI, 8,
+                    RenderResourceCache.FrameNumberBrush);
+                context.DrawText(frameText, new Point(fx + 1, HeaderHeight - 26));
+                lastFrameX = fx;
+            }
+        }
+
         // 주눈금 + 시간 라벨 (캐시된 펜 A-5)
         long firstMajor = (visibleStartMs / majorIntervalMs) * majorIntervalMs;
         for (long timeMs = firstMajor; timeMs <= visibleEndMs; timeMs += majorIntervalMs)
@@ -262,10 +306,12 @@ public class TimelineHeader : Control
     {
         if (intervalMs < 1000)
         {
-            // 1초 미만 간격: "0:00.1", "0:00.5" 형식
+            // 1초 미만 간격: 고정밀 소수점 초 표시
             int mins = (int)(timeMs / 60000);
             double secs = (timeMs % 60000) / 1000.0;
-            return $"{mins}:{secs:00.0}";
+            if (intervalMs <= 200)
+                return $"{mins}:{secs:00.00}"; // 초고줌: "0:03.50"
+            return $"{mins}:{secs:00.0}";       // 일반줌: "0:03.5"
         }
 
         long totalSecs = timeMs / 1000;

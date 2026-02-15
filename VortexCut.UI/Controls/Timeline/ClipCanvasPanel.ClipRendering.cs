@@ -255,18 +255,12 @@ public partial class ClipCanvasPanel
                 clipRect.Width,
                 4);
 
-            var labelGradient = new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(Color.FromArgb(a, r, g, b), 0),
-                    new GradientStop(Color.FromArgb((byte)(a * 0.7), r, g, b), 1)
-                }
-            };
+            // 캐시된 브러시 풀 사용 (매 클립마다 LinearGradientBrush 생성 방지)
+            var labelColor = Color.FromArgb(a, r, g, b);
+            var labelFadeColor = Color.FromArgb((byte)(a * 0.7), r, g, b);
+            var labelBrush = RenderResourceCache.GetHorizontalGradient(labelColor, labelFadeColor);
 
-            context.FillRectangle(labelGradient, colorLabelRect);
+            context.FillRectangle(labelBrush, colorLabelRect);
         }
 
         // 선택된 클립 펄스 글로우 효과 (애니메이션)
@@ -316,14 +310,13 @@ public partial class ClipCanvasPanel
             isSelected ? RenderResourceCache.ClipBorderSelected : RenderResourceCache.ClipBorderNormal,
             clipRect);
 
-        // 트림 핸들 시각화 (양 끝 10px 영역)
-        if (isSelected && width > 30)
+        // 트림 핸들 (그루브 스타일 — img.ly 참고)
+        if ((isSelected || (isHovered && _hoveredEdge != ClipEdge.None)) && width > 30)
         {
-            var leftHandleRect = new Rect(clipRect.X, clipRect.Y, 2, clipRect.Height);
-            context.FillRectangle(RenderResourceCache.TrimHandleBrush, leftHandleRect);
-
-            var rightHandleRect = new Rect(clipRect.Right - 2, clipRect.Y, 2, clipRect.Height);
-            context.FillRectangle(RenderResourceCache.TrimHandleBrush, rightHandleRect);
+            DrawTrimHandle(context, clipRect, ClipEdge.Left,
+                isHovered && _hoveredEdge == ClipEdge.Left);
+            DrawTrimHandle(context, clipRect, ClipEdge.Right,
+                isHovered && _hoveredEdge == ClipEdge.Right);
         }
 
         // 클립 타입 아이콘 (좌측 상단)
@@ -395,6 +388,12 @@ public partial class ClipCanvasPanel
                     durationBgRect);
                 context.DrawText(durationFormatted, new Point(durationX, y + 9));
             }
+        }
+
+        // 이펙트 뱃지 (우측 하단, Full LOD + 80px 이상)
+        if (width > 80 && !isSubtitleClip)
+        {
+            DrawEffectBadges(context, clip, clipRect);
         }
 
         // 클립 전환 효과 오버레이 (페이드 인/아웃 시각화)
@@ -797,17 +796,7 @@ public partial class ClipCanvasPanel
 
         // 페이드 인 (좌측)
         var fadeInRect = new Rect(clipRect.X, clipRect.Y, fadeWidth, clipRect.Height);
-        var fadeInGradient = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
-            GradientStops = new GradientStops
-            {
-                new GradientStop(Color.FromArgb(100, 0, 0, 0), 0),
-                new GradientStop(Color.FromArgb(0, 0, 0, 0), 1)
-            }
-        };
-        context.FillRectangle(fadeInGradient, fadeInRect);
+        context.FillRectangle(RenderResourceCache.TransitionFadeInGradient, fadeInRect);
 
         var fadeInIconGeometry = new StreamGeometry();
         using (var ctx = fadeInIconGeometry.Open())
@@ -830,17 +819,7 @@ public partial class ClipCanvasPanel
             clipRect.Y,
             fadeWidth,
             clipRect.Height);
-        var fadeOutGradient = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
-            GradientStops = new GradientStops
-            {
-                new GradientStop(Color.FromArgb(0, 0, 0, 0), 0),
-                new GradientStop(Color.FromArgb(100, 0, 0, 0), 1)
-            }
-        };
-        context.FillRectangle(fadeOutGradient, fadeOutRect);
+        context.FillRectangle(RenderResourceCache.TransitionFadeOutGradient, fadeOutRect);
 
         var fadeOutIconGeometry = new StreamGeometry();
         using (var ctx = fadeOutIconGeometry.Open())
@@ -856,5 +835,99 @@ public partial class ClipCanvasPanel
             RenderResourceCache.GetSolidBrush(Color.FromArgb(120, 255, 255, 255)),
             RenderResourceCache.GetPen(Color.FromArgb(180, 255, 255, 255), 0.8),
             fadeOutIconGeometry);
+    }
+
+    /// <summary>
+    /// 클립 이펙트 뱃지 렌더링 (우측 하단에 C/S/F/T 표시)
+    /// </summary>
+    private void DrawEffectBadges(DrawingContext context, ClipModel clip, Rect clipRect)
+    {
+        var badges = new List<(string label, Color color)>();
+
+        // Color (색보정)
+        if (clip.Brightness != 0 || clip.Contrast != 0 || clip.Saturation != 0 || clip.Temperature != 0)
+            badges.Add(("C", Color.FromRgb(255, 165, 0))); // Orange
+
+        // Speed (속도)
+        if (Math.Abs(clip.Speed - 1.0) > 0.01)
+            badges.Add(("S", Color.FromRgb(0, 200, 255))); // Cyan
+
+        // Fade (페이드)
+        if (clip.FadeInMs > 0 || clip.FadeOutMs > 0)
+            badges.Add(("F", Color.FromRgb(180, 120, 255))); // Purple
+
+        // Transition (전환)
+        if (clip.TransitionType != TransitionType.None)
+            badges.Add(("T", Color.FromRgb(100, 255, 100))); // Green
+
+        if (badges.Count == 0) return;
+
+        double badgeSize = 14;
+        double spacing = 2;
+        double totalWidth = badges.Count * badgeSize + (badges.Count - 1) * spacing;
+        double startX = clipRect.Right - totalWidth - 6;
+        double badgeY = clipRect.Bottom - badgeSize - 4;
+
+        for (int i = 0; i < badges.Count; i++)
+        {
+            var (label, color) = badges[i];
+            double bx = startX + i * (badgeSize + spacing);
+
+            // 배경 원
+            var bgRect = new Rect(bx, badgeY, badgeSize, badgeSize);
+            context.FillRectangle(
+                RenderResourceCache.GetSolidBrush(Color.FromArgb(200, 0, 0, 0)),
+                bgRect);
+            context.FillRectangle(
+                RenderResourceCache.GetSolidBrush(Color.FromArgb(180, color.R, color.G, color.B)),
+                bgRect);
+
+            // 글자
+            var text = new FormattedText(
+                label,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                RenderResourceCache.SegoeUIBold,
+                9,
+                RenderResourceCache.WhiteBrush);
+
+            context.DrawText(text, new Point(bx + (badgeSize - text.Width) / 2, badgeY + (badgeSize - text.Height) / 2));
+        }
+    }
+
+    /// <summary>
+    /// 트림 핸들 렌더링 (그루브 스타일 — 3개 수직 줄 무늬)
+    /// </summary>
+    private void DrawTrimHandle(DrawingContext context, Rect clipRect, ClipEdge edge, bool isHighlighted)
+    {
+        const double handleWidth = 8;
+        double x = (edge == ClipEdge.Left) ? clipRect.X : clipRect.Right - handleWidth;
+        double y = clipRect.Y;
+        double h = clipRect.Height;
+
+        var handleRect = new Rect(x, y, handleWidth, h);
+
+        // 호버 시 배경 하이라이트
+        if (isHighlighted)
+        {
+            context.FillRectangle(RenderResourceCache.TrimHandleHoverBrush, handleRect);
+        }
+
+        // 외곽 바 (트림 핸들 기본 색상)
+        var barRect = new Rect(
+            edge == ClipEdge.Left ? clipRect.X : clipRect.Right - 2,
+            y, 2, h);
+        context.FillRectangle(RenderResourceCache.TrimHandleBrush, barRect);
+
+        // 그루브 라인 (3개 수직 줄)
+        double centerX = x + handleWidth / 2;
+        double grooveY1 = y + h * 0.3;
+        double grooveY2 = y + h * 0.7;
+        for (int i = -1; i <= 1; i++)
+        {
+            double gx = centerX + i * 2.5;
+            context.DrawLine(RenderResourceCache.TrimGroovePen,
+                new Point(gx, grooveY1), new Point(gx, grooveY2));
+        }
     }
 }

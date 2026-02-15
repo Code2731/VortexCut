@@ -172,6 +172,32 @@ public class TimelineCanvas : Grid
     }
 
     /// <summary>
+    /// 전체 타임라인을 뷰포트에 맞추는 줌
+    /// </summary>
+    public void FitZoom()
+    {
+        if (_viewModel == null) return;
+
+        long maxEndMs = 0;
+        foreach (var clip in _viewModel.Clips)
+        {
+            var end = clip.StartTimeMs + clip.DurationMs;
+            if (end > maxEndMs) maxEndMs = end;
+        }
+
+        if (maxEndMs <= 0) return;
+
+        var viewportWidth = _clipCanvasPanel.Bounds.Width;
+        if (viewportWidth <= 0) viewportWidth = 800;
+
+        var fitPixelsPerMs = viewportWidth / maxEndMs * 0.95; // 5% 여유
+        SetZoom(fitPixelsPerMs);
+
+        // ViewModel ZoomLevel도 동기화
+        _viewModel.ZoomLevel = fitPixelsPerMs / 0.1;
+    }
+
+    /// <summary>
     /// 스크롤 변경 이벤트
     /// </summary>
     private void OnScrollChanged(object? sender, Avalonia.Controls.ScrollChangedEventArgs e)

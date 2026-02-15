@@ -234,6 +234,7 @@ public class RazorSplitAction : IUndoableAction
             DurationMs = rightDuration,
             TrackIndex = _originalClip.TrackIndex,
             TrimStartMs = rightTrimStart,
+            SourceDurationMs = _originalClip.SourceDurationMs,
             ProxyFilePath = _originalClip.ProxyFilePath,
             ColorLabelArgb = _originalClip.ColorLabelArgb
         };

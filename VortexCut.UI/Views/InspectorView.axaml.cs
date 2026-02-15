@@ -21,20 +21,20 @@ public partial class InspectorView : UserControl
     private Slider? _contrastSlider;
     private Slider? _saturationSlider;
     private Slider? _temperatureSlider;
-    private TextBlock? _brightnessValueText;
-    private TextBlock? _contrastValueText;
-    private TextBlock? _saturationValueText;
-    private TextBlock? _temperatureValueText;
+    private Controls.EditableValueText? _brightnessValueText;
+    private Controls.EditableValueText? _contrastValueText;
+    private Controls.EditableValueText? _saturationValueText;
+    private Controls.EditableValueText? _temperatureValueText;
 
     // Audio 슬라이더
     private Slider? _volumeSlider;
     private Slider? _speedSlider;
     private Slider? _fadeInSlider;
     private Slider? _fadeOutSlider;
-    private TextBlock? _volumeValueText;
-    private TextBlock? _speedValueText;
-    private TextBlock? _fadeInValueText;
-    private TextBlock? _fadeOutValueText;
+    private Controls.EditableValueText? _volumeValueText;
+    private Controls.EditableValueText? _speedValueText;
+    private Controls.EditableValueText? _fadeInValueText;
+    private Controls.EditableValueText? _fadeOutValueText;
 
     // Transition
     private ComboBox? _transitionTypeComboBox;
@@ -45,10 +45,10 @@ public partial class InspectorView : UserControl
     private Slider? _startTimeSlider;
     private Slider? _durationSlider;
     private Slider? _opacitySlider;
-    private TextBlock? _startTimeValueText;
-    private TextBlock? _durationValueText;
+    private Controls.EditableValueText? _startTimeValueText;
+    private Controls.EditableValueText? _durationValueText;
     private TextBlock? _trackIndexValueText;
-    private TextBlock? _opacityValueText;
+    private Controls.EditableValueText? _opacityValueText;
 
     // Subtitle
     private TextBox? _subtitleTextBox;
@@ -170,14 +170,19 @@ public partial class InspectorView : UserControl
         _startTimeSlider = this.FindControl<Slider>("StartTimeSlider");
         _durationSlider = this.FindControl<Slider>("DurationSlider");
         _opacitySlider = this.FindControl<Slider>("OpacitySlider");
-        _startTimeValueText = this.FindControl<TextBlock>("StartTimeValueText");
-        _durationValueText = this.FindControl<TextBlock>("DurationValueText");
+        _startTimeValueText = this.FindControl<Controls.EditableValueText>("StartTimeValueText");
+        _durationValueText = this.FindControl<Controls.EditableValueText>("DurationValueText");
         _trackIndexValueText = this.FindControl<TextBlock>("TrackIndexValueText");
-        _opacityValueText = this.FindControl<TextBlock>("OpacityValueText");
+        _opacityValueText = this.FindControl<Controls.EditableValueText>("OpacityValueText");
 
         if (_startTimeSlider != null) _startTimeSlider.ValueChanged += OnPropertiesSliderChanged;
         if (_durationSlider != null) _durationSlider.ValueChanged += OnPropertiesSliderChanged;
         if (_opacitySlider != null) _opacitySlider.ValueChanged += OnPropertiesSliderChanged;
+
+        // 직접 입력 이벤트
+        if (_startTimeValueText != null) _startTimeValueText.ValueCommitted += OnStartTimeCommitted;
+        if (_durationValueText != null) _durationValueText.ValueCommitted += OnDurationCommitted;
+        if (_opacityValueText != null) _opacityValueText.ValueCommitted += OnOpacityCommitted;
 
         var resetPropertiesButton = this.FindControl<Button>("ResetPropertiesButton");
         if (resetPropertiesButton != null) resetPropertiesButton.Click += OnResetPropertiesClick;
@@ -236,11 +241,11 @@ public partial class InspectorView : UserControl
     private void UpdatePropertiesValueTexts()
     {
         if (_startTimeValueText != null && _startTimeSlider != null)
-            _startTimeValueText.Text = FormatTimeMs((long)_startTimeSlider.Value);
+            _startTimeValueText.DisplayValue = FormatTimeMs((long)_startTimeSlider.Value);
         if (_durationValueText != null && _durationSlider != null)
-            _durationValueText.Text = FormatTimeMs((long)_durationSlider.Value);
+            _durationValueText.DisplayValue = FormatTimeMs((long)_durationSlider.Value);
         if (_opacityValueText != null && _opacitySlider != null)
-            _opacityValueText.Text = $"{(int)_opacitySlider.Value}%";
+            _opacityValueText.DisplayValue = $"{(int)_opacitySlider.Value}%";
     }
 
     private static string FormatTimeMs(long ms)
@@ -276,6 +281,69 @@ public partial class InspectorView : UserControl
         UpdatePropertiesValueTexts();
     }
 
+    // --- Properties 직접 입력 핸들러 ---
+
+    private void OnStartTimeCommitted(object? sender, string value)
+    {
+        if (TryParseTimeMs(value, out long ms) && _startTimeSlider != null)
+            _startTimeSlider.Value = ms;
+    }
+
+    private void OnDurationCommitted(object? sender, string value)
+    {
+        if (TryParseTimeMs(value, out long ms) && _durationSlider != null)
+            _durationSlider.Value = Math.Max(1, ms);
+    }
+
+    private void OnOpacityCommitted(object? sender, string value)
+    {
+        var cleaned = value.Replace("%", "").Trim();
+        if (double.TryParse(cleaned, out double v) && _opacitySlider != null)
+            _opacitySlider.Value = Math.Clamp(v, 0, 100);
+    }
+
+    /// <summary>
+    /// "MM:SS.mmm" 또는 숫자(ms) 파싱
+    /// </summary>
+    private static bool TryParseTimeMs(string text, out long ms)
+    {
+        ms = 0;
+        text = text.Trim();
+
+        // "MM:SS.mmm" 형식
+        var colonIdx = text.IndexOf(':');
+        if (colonIdx >= 0)
+        {
+            var parts = text.Split(':');
+            if (parts.Length == 2)
+            {
+                var secParts = parts[1].Split('.');
+                if (int.TryParse(parts[0], out int minutes) &&
+                    int.TryParse(secParts[0], out int seconds))
+                {
+                    int millis = 0;
+                    if (secParts.Length > 1)
+                        int.TryParse(secParts[1].PadRight(3, '0').Substring(0, 3), out millis);
+                    ms = (minutes * 60 + seconds) * 1000L + millis;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // 순수 숫자 (ms)
+        if (long.TryParse(text, out ms))
+            return true;
+
+        // 소수점 초 (예: "1.5" → 1500ms)
+        if (double.TryParse(text, out double sec))
+        {
+            ms = (long)(sec * 1000);
+            return true;
+        }
+        return false;
+    }
+
     // ==================== Color ====================
 
     private void SetupColorSliders()
@@ -284,15 +352,21 @@ public partial class InspectorView : UserControl
         _contrastSlider = this.FindControl<Slider>("ContrastSlider");
         _saturationSlider = this.FindControl<Slider>("SaturationSlider");
         _temperatureSlider = this.FindControl<Slider>("TemperatureSlider");
-        _brightnessValueText = this.FindControl<TextBlock>("BrightnessValueText");
-        _contrastValueText = this.FindControl<TextBlock>("ContrastValueText");
-        _saturationValueText = this.FindControl<TextBlock>("SaturationValueText");
-        _temperatureValueText = this.FindControl<TextBlock>("TemperatureValueText");
+        _brightnessValueText = this.FindControl<Controls.EditableValueText>("BrightnessValueText");
+        _contrastValueText = this.FindControl<Controls.EditableValueText>("ContrastValueText");
+        _saturationValueText = this.FindControl<Controls.EditableValueText>("SaturationValueText");
+        _temperatureValueText = this.FindControl<Controls.EditableValueText>("TemperatureValueText");
 
         if (_brightnessSlider != null) _brightnessSlider.ValueChanged += OnEffectSliderChanged;
         if (_contrastSlider != null) _contrastSlider.ValueChanged += OnEffectSliderChanged;
         if (_saturationSlider != null) _saturationSlider.ValueChanged += OnEffectSliderChanged;
         if (_temperatureSlider != null) _temperatureSlider.ValueChanged += OnEffectSliderChanged;
+
+        // 직접 입력 이벤트
+        if (_brightnessValueText != null) _brightnessValueText.ValueCommitted += OnColorValueCommitted;
+        if (_contrastValueText != null) _contrastValueText.ValueCommitted += OnColorValueCommitted;
+        if (_saturationValueText != null) _saturationValueText.ValueCommitted += OnColorValueCommitted;
+        if (_temperatureValueText != null) _temperatureValueText.ValueCommitted += OnColorValueCommitted;
 
         var resetButton = this.FindControl<Button>("ResetEffectsButton");
         if (resetButton != null) resetButton.Click += OnResetEffectsClick;
@@ -337,13 +411,13 @@ public partial class InspectorView : UserControl
     private void UpdateColorValueTexts()
     {
         if (_brightnessValueText != null && _brightnessSlider != null)
-            _brightnessValueText.Text = ((int)_brightnessSlider.Value).ToString();
+            _brightnessValueText.DisplayValue = ((int)_brightnessSlider.Value).ToString();
         if (_contrastValueText != null && _contrastSlider != null)
-            _contrastValueText.Text = ((int)_contrastSlider.Value).ToString();
+            _contrastValueText.DisplayValue = ((int)_contrastSlider.Value).ToString();
         if (_saturationValueText != null && _saturationSlider != null)
-            _saturationValueText.Text = ((int)_saturationSlider.Value).ToString();
+            _saturationValueText.DisplayValue = ((int)_saturationSlider.Value).ToString();
         if (_temperatureValueText != null && _temperatureSlider != null)
-            _temperatureValueText.Text = ((int)_temperatureSlider.Value).ToString();
+            _temperatureValueText.DisplayValue = ((int)_temperatureSlider.Value).ToString();
     }
 
     private void OnEffectSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
@@ -373,6 +447,23 @@ public partial class InspectorView : UserControl
         SyncSlidersToClip();
     }
 
+    private void OnColorValueCommitted(object? sender, string value)
+    {
+        var cleaned = value.Trim();
+        if (!int.TryParse(cleaned, out int v)) return;
+
+        Slider? slider = sender switch
+        {
+            Controls.EditableValueText s when s == _brightnessValueText => _brightnessSlider,
+            Controls.EditableValueText s when s == _contrastValueText => _contrastSlider,
+            Controls.EditableValueText s when s == _saturationValueText => _saturationSlider,
+            Controls.EditableValueText s when s == _temperatureValueText => _temperatureSlider,
+            _ => null
+        };
+        if (slider != null)
+            slider.Value = Math.Clamp(v, slider.Minimum, slider.Maximum);
+    }
+
     // ==================== Audio ====================
 
     private void SetupAudioSliders()
@@ -381,15 +472,21 @@ public partial class InspectorView : UserControl
         _speedSlider = this.FindControl<Slider>("SpeedSlider");
         _fadeInSlider = this.FindControl<Slider>("FadeInSlider");
         _fadeOutSlider = this.FindControl<Slider>("FadeOutSlider");
-        _volumeValueText = this.FindControl<TextBlock>("VolumeValueText");
-        _speedValueText = this.FindControl<TextBlock>("SpeedValueText");
-        _fadeInValueText = this.FindControl<TextBlock>("FadeInValueText");
-        _fadeOutValueText = this.FindControl<TextBlock>("FadeOutValueText");
+        _volumeValueText = this.FindControl<Controls.EditableValueText>("VolumeValueText");
+        _speedValueText = this.FindControl<Controls.EditableValueText>("SpeedValueText");
+        _fadeInValueText = this.FindControl<Controls.EditableValueText>("FadeInValueText");
+        _fadeOutValueText = this.FindControl<Controls.EditableValueText>("FadeOutValueText");
 
         if (_volumeSlider != null) _volumeSlider.ValueChanged += OnAudioSliderChanged;
         if (_speedSlider != null) _speedSlider.ValueChanged += OnAudioSliderChanged;
         if (_fadeInSlider != null) _fadeInSlider.ValueChanged += OnAudioSliderChanged;
         if (_fadeOutSlider != null) _fadeOutSlider.ValueChanged += OnAudioSliderChanged;
+
+        // 직접 입력 이벤트
+        if (_volumeValueText != null) _volumeValueText.ValueCommitted += OnVolumeCommitted;
+        if (_speedValueText != null) _speedValueText.ValueCommitted += OnSpeedCommitted;
+        if (_fadeInValueText != null) _fadeInValueText.ValueCommitted += OnFadeInCommitted;
+        if (_fadeOutValueText != null) _fadeOutValueText.ValueCommitted += OnFadeOutCommitted;
 
         var resetAudioButton = this.FindControl<Button>("ResetAudioButton");
         if (resetAudioButton != null) resetAudioButton.Click += OnResetAudioClick;
@@ -428,13 +525,13 @@ public partial class InspectorView : UserControl
     private void UpdateAudioValueTexts()
     {
         if (_volumeValueText != null && _volumeSlider != null)
-            _volumeValueText.Text = $"{(int)_volumeSlider.Value}%";
+            _volumeValueText.DisplayValue = $"{(int)_volumeSlider.Value}%";
         if (_speedValueText != null && _speedSlider != null)
-            _speedValueText.Text = $"{_speedSlider.Value / 100.0:F2}x";
+            _speedValueText.DisplayValue = $"{_speedSlider.Value / 100.0:F2}x";
         if (_fadeInValueText != null && _fadeInSlider != null)
-            _fadeInValueText.Text = $"{(int)_fadeInSlider.Value}ms";
+            _fadeInValueText.DisplayValue = $"{(int)_fadeInSlider.Value}ms";
         if (_fadeOutValueText != null && _fadeOutSlider != null)
-            _fadeOutValueText.Text = $"{(int)_fadeOutSlider.Value}ms";
+            _fadeOutValueText.DisplayValue = $"{(int)_fadeOutSlider.Value}ms";
     }
 
     private void OnAudioSliderChanged(object? sender, RangeBaseValueChangedEventArgs e)
@@ -462,6 +559,36 @@ public partial class InspectorView : UserControl
 
         inspectorVm.ResetAudioSettings(clip);
         SyncAudioSlidersToClip();
+    }
+
+    // --- Audio 직접 입력 핸들러 ---
+
+    private void OnVolumeCommitted(object? sender, string value)
+    {
+        var cleaned = value.Replace("%", "").Trim();
+        if (double.TryParse(cleaned, out double v) && _volumeSlider != null)
+            _volumeSlider.Value = Math.Clamp(v, 0, 200);
+    }
+
+    private void OnSpeedCommitted(object? sender, string value)
+    {
+        var cleaned = value.Replace("x", "").Trim();
+        if (double.TryParse(cleaned, out double v) && _speedSlider != null)
+            _speedSlider.Value = Math.Clamp(v * 100, 10, 400); // 슬라이더 값은 퍼센트
+    }
+
+    private void OnFadeInCommitted(object? sender, string value)
+    {
+        var cleaned = value.Replace("ms", "").Trim();
+        if (long.TryParse(cleaned, out long v) && _fadeInSlider != null)
+            _fadeInSlider.Value = Math.Clamp(v, 0, 5000);
+    }
+
+    private void OnFadeOutCommitted(object? sender, string value)
+    {
+        var cleaned = value.Replace("ms", "").Trim();
+        if (long.TryParse(cleaned, out long v) && _fadeOutSlider != null)
+            _fadeOutSlider.Value = Math.Clamp(v, 0, 5000);
     }
 
     // ==================== Subtitle ====================

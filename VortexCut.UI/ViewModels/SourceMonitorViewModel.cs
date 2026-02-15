@@ -199,7 +199,7 @@ public partial class SourceMonitorViewModel : ViewModelBase, IDisposable
                         using var frame = _session?.Generate(ts);
                         if (frame != null)
                         {
-                            frameData = frame.Data.ToArray();
+                            frameData = frame.Data; // ToArray() 제거 — Data는 관리 메모리, Dispose 후에도 유효
                             width = frame.Width;
                             height = frame.Height;
                         }
@@ -258,6 +258,10 @@ public partial class SourceMonitorViewModel : ViewModelBase, IDisposable
         }
         else
         {
+            // IsPlaying을 먼저 설정해야 TwoWay 바인딩이 스크럽 렌더를 차단함
+            // (CurrentTimeMs 변경 → Slider ValueChanged → RenderFrameAsync에서 IsPlaying 체크)
+            IsPlaying = true;
+
             // 영상 끝 근처에서 재생 시 → 처음부터
             if (CurrentTimeMs >= DurationMs - 500)
             {
@@ -268,7 +272,6 @@ public partial class SourceMonitorViewModel : ViewModelBase, IDisposable
             Interlocked.Exchange(ref _playbackRenderActive, 0);
             _playbackClock.Restart();
             _playbackTimer.Start();
-            IsPlaying = true;
         }
     }
 
@@ -322,7 +325,7 @@ public partial class SourceMonitorViewModel : ViewModelBase, IDisposable
                     using var frame = _session?.Generate(timestampMs);
                     if (frame != null)
                     {
-                        frameData = frame.Data.ToArray();
+                        frameData = frame.Data; // ToArray() 제거 — Data는 관리 메모리, Dispose 후에도 유효
                         width = frame.Width;
                         height = frame.Height;
                     }

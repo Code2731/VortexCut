@@ -50,7 +50,51 @@ public partial class TimelineViewModel : ViewModelBase
     private long _currentTimeMs = 0;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ZoomPercent))]
+    [NotifyPropertyChangedFor(nameof(ZoomPercentDisplay))]
     private double _zoomLevel = 1.0;
+
+    /// <summary>
+    /// 줌 퍼센트 (10~500), ZoomLevel과 양방향 연동
+    /// </summary>
+    public double ZoomPercent
+    {
+        get => ZoomLevel * 100.0;
+        set
+        {
+            var clamped = Math.Clamp(value, 10, 500);
+            ZoomLevel = clamped / 100.0;
+        }
+    }
+
+    /// <summary>
+    /// 줌 퍼센트 표시 텍스트
+    /// </summary>
+    public string ZoomPercentDisplay => $"{(int)(ZoomLevel * 100)}%";
+
+    [RelayCommand]
+    private void ZoomIn()
+    {
+        ZoomPercent = Math.Min(ZoomPercent + 25, 500);
+    }
+
+    [RelayCommand]
+    private void ZoomOut()
+    {
+        ZoomPercent = Math.Max(ZoomPercent - 25, 10);
+    }
+
+    [RelayCommand]
+    private void ZoomFit()
+    {
+        // 전체 타임라인을 뷰포트에 맞춤 (콜백이 설정되어 있으면 호출)
+        RequestZoomFit?.Invoke();
+    }
+
+    /// <summary>
+    /// 줌 Fit 요청 콜백 (ClipCanvasPanel에서 설정)
+    /// </summary>
+    public Action? RequestZoomFit { get; set; }
 
     [ObservableProperty]
     private ClipModel? _selectedClip;
@@ -117,6 +161,29 @@ public partial class TimelineViewModel : ViewModelBase
     public IProjectService ProjectServiceRef => _projectService;
 
     /// <summary>
+    /// 타임라인 총 길이 표시 (MM:SS 형식)
+    /// </summary>
+    public string TotalDurationDisplay
+    {
+        get
+        {
+            long maxEndMs = 0;
+            foreach (var clip in Clips)
+            {
+                var end = clip.StartTimeMs + clip.DurationMs;
+                if (end > maxEndMs) maxEndMs = end;
+            }
+            var totalSec = maxEndMs / 1000;
+            return $"{totalSec / 60:D2}:{totalSec % 60:D2}";
+        }
+    }
+
+    /// <summary>
+    /// 타임라인 총 클립 수
+    /// </summary>
+    public int TotalClipCount => Clips.Count;
+
+    /// <summary>
     /// 재생 중지 요청 콜백 (MainViewModel에서 설정)
     /// </summary>
     public Action? RequestStopPlayback { get; set; }
@@ -130,6 +197,13 @@ public partial class TimelineViewModel : ViewModelBase
         _undoRedoService.OnHistoryChanged = () =>
         {
             _projectService.ClearRenderCache();
+        };
+
+        // Clips 컬렉션 변경 시 StatusBar 프로퍼티 갱신
+        Clips.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(TotalDurationDisplay));
+            OnPropertyChanged(nameof(TotalClipCount));
         };
 
         InitializeDefaultTracks();
@@ -183,6 +257,7 @@ public partial class TimelineViewModel : ViewModelBase
 
             System.Diagnostics.Debug.WriteLine($"   Calling _projectService.AddVideoClip...");
             var clip = _projectService.AddVideoClip(filePath, CurrentTimeMs, durationMs, 0, proxyFilePath);
+            clip.SourceDurationMs = durationMs; // 원본 소스 전체 길이 (고스트 아웃라인용)
             System.Diagnostics.Debug.WriteLine($"   ✅ Clip created: ID={clip.Id}, StartTimeMs={clip.StartTimeMs}, DurationMs={clip.DurationMs}, TrackIndex={clip.TrackIndex}");
 
             // UI 스레드에서 실행
@@ -208,6 +283,7 @@ public partial class TimelineViewModel : ViewModelBase
             mediaItem.DurationMs,
             trackIndex,
             mediaItem.ProxyFilePath);
+        clip.SourceDurationMs = mediaItem.DurationMs; // 원본 소스 전체 길이
         Clips.Add(clip);
     }
 
@@ -221,6 +297,25 @@ public partial class TimelineViewModel : ViewModelBase
     {
         long playheadMs = CurrentTimeMs;
 
+        // 0) Armed 트랙 우선 탐색 (겹치지 않으면 바로 사용)
+        for (int i = 0; i < VideoTracks.Count; i++)
+        {
+            if (!VideoTracks[i].IsArmed) continue;
+            bool hasOverlap = false;
+            foreach (var clip in Clips)
+            {
+                if (clip.TrackIndex != i) continue;
+                long clipEnd = clip.StartTimeMs + clip.DurationMs;
+                if (playheadMs < clipEnd && (playheadMs + durationMs) > clip.StartTimeMs)
+                {
+                    hasOverlap = true;
+                    break;
+                }
+            }
+            if (!hasOverlap)
+                return (i, playheadMs);
+        }
+
         // 1) 재생헤드 위치에서 겹치지 않는 비디오 트랙 찾기
         for (int i = 0; i < VideoTracks.Count; i++)
         {
@@ -228,7 +323,6 @@ public partial class TimelineViewModel : ViewModelBase
             foreach (var clip in Clips)
             {
                 if (clip.TrackIndex != i) continue;
-                // 비디오 트랙만 (자막/오디오 트랙 인덱스는 VideoTracks.Count 이상)
                 long clipEnd = clip.StartTimeMs + clip.DurationMs;
                 if (playheadMs < clipEnd && (playheadMs + durationMs) > clip.StartTimeMs)
                 {
@@ -395,6 +489,162 @@ public partial class TimelineViewModel : ViewModelBase
         SelectedClips.Clear();
         foreach (var clip in Clips)
             SelectedClips.Add(clip);
+    }
+
+    // 인메모리 클립보드
+    private List<ClipModel> _clipboard = new();
+
+    /// <summary>
+    /// 선택된 클립 복사 (Ctrl+C)
+    /// </summary>
+    [RelayCommand]
+    public void CopySelectedClips()
+    {
+        if (SelectedClips.Count == 0) return;
+        _clipboard = SelectedClips.Select(c => c.Clone()).ToList();
+    }
+
+    /// <summary>
+    /// 선택된 클립 잘라내기 (Ctrl+X) — 복사 후 삭제
+    /// </summary>
+    [RelayCommand]
+    public void CutSelectedClips()
+    {
+        if (SelectedClips.Count == 0) return;
+        CopySelectedClips();
+        DeleteSelectedClips();
+    }
+
+    /// <summary>
+    /// 클립보드 붙여넣기 (Ctrl+V) — 플레이헤드 위치에 삽입
+    /// </summary>
+    [RelayCommand]
+    public void PasteClips()
+    {
+        if (_clipboard.Count == 0) return;
+
+        // 클립보드 클립들의 가장 빠른 시작 시간
+        long minStartMs = _clipboard.Min(c => c.StartTimeMs);
+        long offsetMs = CurrentTimeMs - minStartMs;
+
+        var actions = new List<Core.Interfaces.IUndoableAction>();
+        foreach (var srcClip in _clipboard)
+        {
+            var newClip = srcClip.Clone();
+            newClip.StartTimeMs += offsetMs;
+            actions.Add(new AddClipAction(
+                Clips, _projectService,
+                newClip.FilePath, newClip.StartTimeMs, newClip.DurationMs,
+                newClip.TrackIndex, newClip.ProxyFilePath));
+        }
+
+        if (actions.Count == 1)
+            UndoRedo.ExecuteAction(actions[0]);
+        else
+            UndoRedo.ExecuteAction(new CompositeAction("클립 붙여넣기", actions));
+    }
+
+    /// <summary>
+    /// 플레이헤드 위치에서 선택된 클립 분할 (S 키)
+    /// </summary>
+    [RelayCommand]
+    public void SplitAtPlayhead()
+    {
+        if (SelectedClips.Count > 0)
+        {
+            // 선택된 클립만 분할
+            foreach (var clip in SelectedClips.ToList())
+            {
+                RazorTool?.CutClipAtTime(clip, CurrentTimeMs);
+            }
+        }
+        else
+        {
+            // 선택 없으면 모든 트랙 분할
+            RazorTool?.CutAllTracksAtTime(CurrentTimeMs);
+        }
+    }
+
+    /// <summary>
+    /// 플레이헤드 아래 최상위 비디오 트랙 클립 반환
+    /// </summary>
+    public ClipModel? FindClipUnderPlayhead()
+    {
+        // armed 트랙 우선
+        for (int i = 0; i < VideoTracks.Count; i++)
+        {
+            if (!VideoTracks[i].IsArmed) continue;
+            var clip = Clips.FirstOrDefault(c =>
+                c.TrackIndex == i &&
+                c.StartTimeMs <= CurrentTimeMs &&
+                c.EndTimeMs > CurrentTimeMs);
+            if (clip != null) return clip;
+        }
+
+        // V1부터 순서대로
+        for (int i = 0; i < VideoTracks.Count; i++)
+        {
+            var clip = Clips.FirstOrDefault(c =>
+                c.TrackIndex == i &&
+                c.StartTimeMs <= CurrentTimeMs &&
+                c.EndTimeMs > CurrentTimeMs);
+            if (clip != null) return clip;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 다이나믹 트림 — 재생 중 I 키: 왼쪽 트림 (클립 시작을 플레이헤드로 이동)
+    /// </summary>
+    public void DynamicTrimIn()
+    {
+        var clip = FindClipUnderPlayhead();
+        if (clip == null) return;
+
+        long oldStart = clip.StartTimeMs;
+        long oldDuration = clip.DurationMs;
+
+        if (CurrentTimeMs <= clip.StartTimeMs || CurrentTimeMs >= clip.EndTimeMs)
+            return;
+
+        long deltaMs = CurrentTimeMs - clip.StartTimeMs;
+        clip.TrimStartMs += deltaMs;
+        clip.StartTimeMs = CurrentTimeMs;
+        clip.DurationMs -= deltaMs;
+
+        ProjectServiceRef.SyncClipToRust(clip);
+
+        var trimAction = new Services.Actions.TrimClipAction(
+            clip, oldStart, oldDuration,
+            clip.StartTimeMs, clip.DurationMs,
+            ProjectServiceRef);
+        UndoRedo.RecordAction(trimAction);
+    }
+
+    /// <summary>
+    /// 다이나믹 트림 — 재생 중 O 키: 오른쪽 트림 (클립 끝을 플레이헤드로 이동)
+    /// </summary>
+    public void DynamicTrimOut()
+    {
+        var clip = FindClipUnderPlayhead();
+        if (clip == null) return;
+
+        long oldStart = clip.StartTimeMs;
+        long oldDuration = clip.DurationMs;
+
+        if (CurrentTimeMs <= clip.StartTimeMs || CurrentTimeMs >= clip.EndTimeMs)
+            return;
+
+        clip.DurationMs = CurrentTimeMs - clip.StartTimeMs;
+
+        ProjectServiceRef.SyncClipToRust(clip);
+
+        var trimAction = new Services.Actions.TrimClipAction(
+            clip, oldStart, oldDuration,
+            clip.StartTimeMs, clip.DurationMs,
+            ProjectServiceRef);
+        UndoRedo.RecordAction(trimAction);
     }
 
     /// <summary>

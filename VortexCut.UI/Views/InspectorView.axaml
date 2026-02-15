@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:VortexCut.UI.ViewModels"
+             xmlns:controls="clr-namespace:VortexCut.UI.Controls"
              mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="600"
              x:Class="VortexCut.UI.Views.InspectorView"
              x:DataType="vm:MainViewModel">
@@ -43,7 +44,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Start Time (ms)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="StartTimeValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="StartTimeValueText" Grid.Column="1" DisplayValue="0"/>
                         </Grid>
                         <Slider x:Name="StartTimeSlider" Minimum="0" Maximum="600000" Value="0" SmallChange="100" LargeChange="1000"/>
                     </StackPanel>
@@ -52,7 +53,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Duration (ms)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="DurationValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="DurationValueText" Grid.Column="1" DisplayValue="0"/>
                         </Grid>
                         <Slider x:Name="DurationSlider" Minimum="100" Maximum="600000" Value="1000" SmallChange="100" LargeChange="1000"/>
                     </StackPanel>
@@ -72,7 +73,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Opacity" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="OpacityValueText" Grid.Column="1" Text="100%" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="OpacityValueText" Grid.Column="1" DisplayValue="100%"/>
                         </Grid>
                         <Slider x:Name="OpacitySlider" Minimum="0" Maximum="100" Value="100" SmallChange="1" LargeChange="10"/>
                     </StackPanel>
@@ -105,7 +106,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Brightness" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="BrightnessValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="BrightnessValueText" Grid.Column="1" DisplayValue="0"/>
                         </Grid>
                         <Slider x:Name="BrightnessSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
                     </StackPanel>
@@ -113,7 +114,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Contrast" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="ContrastValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="ContrastValueText" Grid.Column="1" DisplayValue="0"/>
                         </Grid>
                         <Slider x:Name="ContrastSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
                     </StackPanel>
@@ -121,7 +122,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Saturation" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="SaturationValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="SaturationValueText" Grid.Column="1" DisplayValue="0"/>
                         </Grid>
                         <Slider x:Name="SaturationSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
                     </StackPanel>
@@ -131,7 +132,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Temperature" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="TemperatureValueText" Grid.Column="1" Text="0" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="TemperatureValueText" Grid.Column="1" DisplayValue="0"/>
                         </Grid>
                         <Slider x:Name="TemperatureSlider" Minimum="-100" Maximum="100" Value="0" SmallChange="1" LargeChange="10"/>
                     </StackPanel>
@@ -157,7 +158,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Volume" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="VolumeValueText" Grid.Column="1" Text="100%" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="VolumeValueText" Grid.Column="1" DisplayValue="100%"/>
                         </Grid>
                         <Slider x:Name="VolumeSlider" Minimum="0" Maximum="200" Value="100" SmallChange="1" LargeChange="10"/>
                     </StackPanel>
@@ -166,7 +167,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Speed" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="SpeedValueText" Grid.Column="1" Text="1.00x" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="SpeedValueText" Grid.Column="1" DisplayValue="1.00x"/>
                         </Grid>
                         <Slider x:Name="SpeedSlider" Minimum="25" Maximum="400" Value="100" SmallChange="5" LargeChange="25"/>
                     </StackPanel>
@@ -179,7 +180,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Fade In" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="FadeInValueText" Grid.Column="1" Text="0ms" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="FadeInValueText" Grid.Column="1" DisplayValue="0ms"/>
                         </Grid>
                         <Slider x:Name="FadeInSlider" Minimum="0" Maximum="5000" Value="0" SmallChange="100" LargeChange="500"/>
                     </StackPanel>
@@ -187,7 +188,7 @@
                     <StackPanel Spacing="4">
                         <Grid ColumnDefinitions="*, Auto">
                             <TextBlock Text="Fade Out" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock x:Name="FadeOutValueText" Grid.Column="1" Text="0ms" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                            <controls:EditableValueText x:Name="FadeOutValueText" Grid.Column="1" DisplayValue="0ms"/>
                         </Grid>
                         <Slider x:Name="FadeOutSlider" Minimum="0" Maximum="5000" Value="0" SmallChange="100" LargeChange="500"/>
                     </StackPanel>

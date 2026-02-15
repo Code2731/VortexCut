@@ -18,28 +18,35 @@ public partial class ProjectBinView : UserControl
         InitializeComponent();
     }
 
-    protected override void OnLoaded(RoutedEventArgs e)
-    {
-        base.OnLoaded(e);
-
-        // ListBox 더블클릭 → Clip Monitor에 로드
-        var listBox = this.FindControl<ListBox>("MediaListBox");
-        if (listBox != null)
-        {
-            listBox.DoubleTapped += OnMediaItemDoubleTapped;
-        }
-    }
-
     /// <summary>
     /// Project Bin 미디어 아이템 더블클릭 → Clip Monitor에 로드
+    /// (XAML에서 ListBox.DoubleTapped로 연결)
     /// </summary>
     private void OnMediaItemDoubleTapped(object? sender, TappedEventArgs e)
     {
         // 드래그 중이면 무시
         if (_isDragging) return;
 
-        var listBox = sender as ListBox;
-        if (listBox?.SelectedItem is not MediaItem mediaItem) return;
+        var listBox = this.FindControl<ListBox>("MediaListBox");
+        var mediaItem = listBox?.SelectedItem as MediaItem;
+
+        // SelectedItem이 아직 안 설정된 경우 → 클릭된 요소에서 DataContext 탐색
+        if (mediaItem == null && e.Source is Control source)
+        {
+            // 시각 트리를 올라가며 MediaItem DataContext 탐색
+            var current = source;
+            while (current != null)
+            {
+                if (current.DataContext is MediaItem item)
+                {
+                    mediaItem = item;
+                    break;
+                }
+                current = current.Parent as Control;
+            }
+        }
+
+        if (mediaItem == null) return;
 
         // MainViewModel을 찾아서 LoadClipToSourceMonitor 호출
         var mainWindow = TopLevel.GetTopLevel(this);
@@ -55,9 +62,18 @@ public partial class ProjectBinView : UserControl
 
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            _dragStartPoint = e.GetPosition(this);
-            _isDragging = false;
-            _pointerDownOnItem = true;
+            // ListBox 아이템 위에서만 드래그 준비
+            var listBox = this.FindControl<ListBox>("MediaListBox");
+            if (listBox?.SelectedItem is MediaItem)
+            {
+                _dragStartPoint = e.GetPosition(this);
+                _isDragging = false;
+                _pointerDownOnItem = true;
+            }
+            else
+            {
+                _pointerDownOnItem = false;
+            }
         }
     }
 

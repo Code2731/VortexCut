@@ -123,6 +123,27 @@ public static class RenderResourceCache
     public static readonly IPen TrimHandlePen =
         new Pen(new SolidColorBrush(Color.FromRgb(255, 200, 80)).ToImmutable(), 2);
 
+    // 트림 핸들 (그루브 스타일)
+    public static readonly IBrush TrimHandleHoverBrush =
+        new SolidColorBrush(Color.FromArgb(100, 255, 200, 80)).ToImmutable();
+    public static readonly IPen TrimGroovePen =
+        new Pen(new SolidColorBrush(Color.FromArgb(200, 255, 240, 180)).ToImmutable(), 1);
+    public static readonly IPen TrimHandleOutlinePen =
+        new Pen(new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)).ToImmutable(), 0.5);
+
+    // 서브소눈금 점 + 프레임 번호 (고줌 전용)
+    public static readonly IBrush SubMinorTickDotBrush =
+        new SolidColorBrush(Color.FromArgb(120, 120, 120, 120)).ToImmutable();
+    public static readonly IBrush FrameNumberBrush =
+        new SolidColorBrush(Color.FromArgb(150, 180, 180, 180)).ToImmutable();
+
+    // 고스트 아웃라인 (트림 중 원본 범위 표시)
+    public static readonly IBrush GhostFillBrush =
+        new SolidColorBrush(Color.FromArgb(25, 255, 200, 80)).ToImmutable();
+    public static readonly IPen GhostOutlinePen =
+        new Pen(new SolidColorBrush(Color.FromArgb(120, 255, 200, 80)).ToImmutable(), 1.5)
+        { DashStyle = new DashStyle(new double[] { 6, 4 }, 0) };
+
     // ============================================================
     // TimelineHeader용 정적 리소스
     // ============================================================
@@ -317,6 +338,36 @@ public static class RenderResourceCache
     }
 
     /// <summary>
+    /// 수평 LinearGradientBrush 풀에서 조회/생성 (좌→우)
+    /// </summary>
+    private static readonly Dictionary<ulong, IBrush> _hGradientBrushPool = new();
+
+    public static IBrush GetHorizontalGradient(Color left, Color right)
+    {
+        uint leftKey = ((uint)left.A << 24) | ((uint)left.R << 16) |
+                       ((uint)left.G << 8) | left.B;
+        uint rightKey = ((uint)right.A << 24) | ((uint)right.R << 16) |
+                        ((uint)right.G << 8) | right.B;
+        ulong key = ((ulong)leftKey << 32) | rightKey;
+
+        if (!_hGradientBrushPool.TryGetValue(key, out var brush))
+        {
+            brush = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(left, 0),
+                    new GradientStop(right, 1)
+                }
+            }.ToImmutable();
+            _hGradientBrushPool[key] = brush;
+        }
+        return brush;
+    }
+
+    /// <summary>
     /// Pen 풀에서 조회/생성 (색상 + 두께 키)
     /// </summary>
     private static readonly Dictionary<(uint, int), IPen> _penPool = new();
@@ -344,6 +395,7 @@ public static class RenderResourceCache
     {
         _solidBrushPool.Clear();
         _gradientBrushPool.Clear();
+        _hGradientBrushPool.Clear();
         _penPool.Clear();
     }
 
@@ -384,6 +436,129 @@ public static class RenderResourceCache
         {
             new GradientStop(Color.FromArgb(200, 30, 30, 32), 0),
             new GradientStop(Color.FromArgb(220, 25, 25, 27), 1)
+        }
+    }.ToImmutable();
+
+    // ============================================================
+    // GraphEditor용 정적 리소스 (Render() 내 매 프레임 생성 방지)
+    // ============================================================
+
+    // 배경 그라디언트
+    public static readonly IBrush GraphBgGradient = new LinearGradientBrush
+    {
+        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+        GradientStops = new GradientStops
+        {
+            new GradientStop(Color.Parse("#252527"), 0),
+            new GradientStop(Color.Parse("#1E1E20"), 0.5),
+            new GradientStop(Color.Parse("#181A18"), 1)
+        }
+    }.ToImmutable();
+
+    // 비네팅 효과
+    public static readonly IBrush GraphVignetteBrush = new RadialGradientBrush
+    {
+        Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+        GradientOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+        RadiusX = RelativeScalar.Parse("80%"),
+        RadiusY = RelativeScalar.Parse("80%"),
+        GradientStops = new GradientStops
+        {
+            new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.3),
+            new GradientStop(Color.FromArgb(40, 0, 0, 0), 1)
+        }
+    }.ToImmutable();
+
+    // 그리드 펜
+    public static readonly IPen GraphMicroGridPen =
+        new Pen(new SolidColorBrush(Color.FromArgb(20, 80, 80, 80)).ToImmutable(), 0.5);
+    public static readonly IPen GraphMinorGridPen =
+        new Pen(new SolidColorBrush(Color.FromArgb(40, 100, 100, 100)).ToImmutable(), 0.8);
+    public static readonly IPen GraphMajorGridPen =
+        new Pen(new SolidColorBrush(Color.FromArgb(80, 120, 120, 120)).ToImmutable(), 1.2);
+
+    // X/Y축 펜 (그림자, 본체, 하이라이트)
+    public static readonly IPen GraphAxisShadowPen =
+        new Pen(new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)).ToImmutable(), 3);
+    public static readonly IPen GraphAxisBodyPen =
+        new Pen(new SolidColorBrush(Color.FromRgb(150, 150, 150)).ToImmutable(), 2.5);
+    public static readonly IPen GraphAxisHighlightPen =
+        new Pen(new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)).ToImmutable(), 1);
+
+    // 곡선 펜
+    public static readonly IPen GraphCurveShadowPen =
+        new Pen(new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)).ToImmutable(), 3.5);
+    public static readonly IPen GraphCurveGlowPen =
+        new Pen(new SolidColorBrush(Color.FromArgb(60, 80, 220, 255)).ToImmutable(), 5);
+    public static readonly IPen GraphCurveBodyPen =
+        new Pen(new SolidColorBrush(Color.FromRgb(80, 220, 255)).ToImmutable(), 2.5);
+
+    // 키프레임 포인트
+    public static readonly IBrush GraphKfShadowBrush =
+        new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)).ToImmutable();
+    public static readonly IBrush GraphKfGlowBrush =
+        new SolidColorBrush(Color.FromArgb(80, 255, 220, 80)).ToImmutable();
+    public static readonly IBrush GraphKfNormalInnerBrush =
+        new SolidColorBrush(Color.FromRgb(255, 255, 255)).ToImmutable();
+    public static readonly IBrush GraphKfNormalOuterBrush =
+        new SolidColorBrush(Color.FromRgb(200, 200, 200)).ToImmutable();
+    public static readonly IBrush GraphKfSelectedInnerBrush =
+        new SolidColorBrush(Color.FromRgb(255, 240, 100)).ToImmutable();
+    public static readonly IBrush GraphKfSelectedOuterBrush =
+        new SolidColorBrush(Color.FromRgb(255, 200, 60)).ToImmutable();
+    public static readonly IPen GraphKfNormalBorderPen =
+        new Pen(new SolidColorBrush(Color.FromRgb(100, 100, 100)).ToImmutable(), 2);
+    public static readonly IPen GraphKfSelectedBorderPen =
+        new Pen(new SolidColorBrush(Color.FromRgb(255, 180, 40)).ToImmutable(), 2);
+
+    // 베지어 핸들
+    public static readonly IPen GraphHandleLineShadowPen =
+        new Pen(new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)).ToImmutable(), 2.5);
+    public static readonly IPen GraphHandleLinePen = CreateDashedPen(
+        Color.FromRgb(180, 180, 180), 2, new double[] { 3, 3 });
+    public static readonly IBrush GraphHandleOutGradient = new RadialGradientBrush
+    {
+        Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+        GradientOrigin = new RelativePoint(0.3, 0.3, RelativeUnit.Relative),
+        GradientStops = new GradientStops
+        {
+            new GradientStop(Color.FromRgb(150, 255, 150), 0),
+            new GradientStop(Color.FromRgb(80, 200, 80), 1)
+        }
+    }.ToImmutable();
+    public static readonly IBrush GraphHandleInGradient = new RadialGradientBrush
+    {
+        Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+        GradientOrigin = new RelativePoint(0.3, 0.3, RelativeUnit.Relative),
+        GradientStops = new GradientStops
+        {
+            new GradientStop(Color.FromRgb(255, 150, 150), 0),
+            new GradientStop(Color.FromRgb(200, 80, 80), 1)
+        }
+    }.ToImmutable();
+    public static readonly IPen GraphHandleBorderPen =
+        new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)).ToImmutable(), 2);
+
+    // 트랜지션 오버레이 (페이드 인/아웃)
+    public static readonly IBrush TransitionFadeInGradient = new LinearGradientBrush
+    {
+        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+        GradientStops = new GradientStops
+        {
+            new GradientStop(Color.FromArgb(100, 0, 0, 0), 0),
+            new GradientStop(Color.FromArgb(0, 0, 0, 0), 1)
+        }
+    }.ToImmutable();
+    public static readonly IBrush TransitionFadeOutGradient = new LinearGradientBrush
+    {
+        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+        GradientStops = new GradientStops
+        {
+            new GradientStop(Color.FromArgb(0, 0, 0, 0), 0),
+            new GradientStop(Color.FromArgb(100, 0, 0, 0), 1)
         }
     }.ToImmutable();
 

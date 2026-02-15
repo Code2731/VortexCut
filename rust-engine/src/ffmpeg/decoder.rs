@@ -81,10 +81,11 @@ impl Decoder {
         let mut context = ffmpeg::codec::context::Context::from_parameters(codec_params)
             .map_err(|e| format!("Failed to create context: {}", e))?;
 
-        // OPTIMIZATION: Multi-threading
+        // OPTIMIZATION: Multi-threading (디코더당 최대 4스레드)
+        // 960x540에서 4스레드 이상은 수확체감. 트랜지션 시 2개 디코더 동시 구동 →
+        // 전체 코어(8~16) 사용하면 스레드 경합으로 오히려 느려짐
         if let Ok(parallelism) = std::thread::available_parallelism() {
-            let thread_count = parallelism.get();
-            // Multi-threading 활성화
+            let thread_count = parallelism.get().min(4);
             context.set_threading(ffmpeg::threading::Config {
                 kind: ffmpeg::threading::Type::Frame,
                 count: thread_count,

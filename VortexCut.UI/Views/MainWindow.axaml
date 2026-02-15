@@ -152,15 +152,19 @@
                     <TextBlock Text="Ready" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontSize="11"/>
                 </StackPanel>
 
-                <!-- Center: System Stats -->
+                <!-- Center: Timeline Stats -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="GPU:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="11"/>
-                        <TextBlock Text="0%" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"/>
+                        <TextBlock Text="FPS:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="11"/>
+                        <TextBlock Text="{Binding Preview.FpsDisplay}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="RAM:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="11"/>
-                        <TextBlock Text="0.0 GB" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"/>
+                        <TextBlock Text="Duration:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="11"/>
+                        <TextBlock Text="{Binding Timeline.TotalDurationDisplay}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="Clips:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="11"/>
+                        <TextBlock Text="{Binding Timeline.TotalClipCount}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" FontSize="11" FontWeight="SemiBold"/>
                     </StackPanel>
                 </StackPanel>
 

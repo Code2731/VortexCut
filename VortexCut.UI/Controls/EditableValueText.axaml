@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="VortexCut.UI.Controls.EditableValueText">
+    <Grid>
+        <!-- 읽기 모드: TextBlock (더블클릭 시 편집 모드로 전환) -->
+        <TextBlock x:Name="DisplayText"
+                   Foreground="{StaticResource AccentBrush}"
+                   FontWeight="SemiBold"
+                   FontSize="11"
+                   VerticalAlignment="Center"
+                   Cursor="Hand"/>
+
+        <!-- 편집 모드: TextBox -->
+        <TextBox x:Name="EditBox"
+                 FontSize="11"
+                 Padding="2,1"
+                 MinWidth="50"
+                 Background="{StaticResource BgBaseBrush}"
+                 Foreground="{StaticResource TextBrightBrush}"
+                 BorderThickness="1"
+                 BorderBrush="{StaticResource AccentBrush}"
+                 VerticalAlignment="Center"
+                 IsVisible="False"/>
+    </Grid>
+</UserControl>

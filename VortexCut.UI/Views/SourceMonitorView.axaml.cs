@@ -40,6 +40,11 @@ public partial class SourceMonitorView : UserControl
     private void OnSliderPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _isUserScrubbing = true;
+
+        // 재생 중이면 정지 → 스크럽 가능하게
+        var vm = GetSourceMonitorViewModel();
+        if (vm != null && vm.IsPlaying)
+            vm.TogglePlayback();
     }
 
     private void OnSliderPointerMoved(object? sender, PointerEventArgs e)
@@ -47,8 +52,9 @@ public partial class SourceMonitorView : UserControl
         if (!_isUserScrubbing || _scrubSlider == null) return;
 
         var vm = GetSourceMonitorViewModel();
-        if (vm == null || vm.IsPlaying) return;
+        if (vm == null) return;
 
+        // TwoWay 바인딩이 CurrentTimeMs를 갱신하므로 슬라이더 값 사용
         vm.RenderFrameAsync((long)_scrubSlider.Value);
     }
 
@@ -63,8 +69,9 @@ public partial class SourceMonitorView : UserControl
         _isUserScrubbing = false;
 
         var vm = GetSourceMonitorViewModel();
-        if (vm == null || vm.IsPlaying) return;
+        if (vm == null) return;
 
+        // 최종 위치 렌더링
         vm.RenderFrameAsync((long)_scrubSlider.Value);
     }
 

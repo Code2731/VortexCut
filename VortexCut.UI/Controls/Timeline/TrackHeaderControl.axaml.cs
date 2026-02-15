@@ -149,6 +149,13 @@ public partial class TrackHeaderControl : UserControl
         {
             muteButton.IsCheckedChanged += OnMuteToggled;
         }
+
+        // A 버튼 토글 → Armed 상호배타 처리
+        var armButton = this.FindControl<ToggleButton>("ArmButton");
+        if (armButton != null)
+        {
+            armButton.IsCheckedChanged += OnArmToggled;
+        }
     }
 
     private void OnMuteToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -160,6 +167,31 @@ public partial class TrackHeaderControl : UserControl
         if (mainWindow?.DataContext is MainViewModel mainVm)
         {
             mainVm.Timeline.ProjectServiceRef.SetTrackMuted(Track.Id, Track.IsMuted);
+        }
+    }
+
+    /// <summary>
+    /// Armed 토글: 같은 타입 트랙 중 1개만 armed 가능
+    /// </summary>
+    private void OnArmToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (Track == null || !Track.IsArmed) return;
+
+        // 같은 타입의 다른 트랙 armed 해제
+        var mainWindow = TopLevel.GetTopLevel(this);
+        if (mainWindow?.DataContext is MainViewModel mainVm)
+        {
+            var tracks = Track.Type == TrackType.Video
+                ? mainVm.Timeline.VideoTracks
+                : Track.Type == TrackType.Audio
+                    ? mainVm.Timeline.AudioTracks
+                    : mainVm.Timeline.SubtitleTracks;
+
+            foreach (var t in tracks)
+            {
+                if (t != Track && t.IsArmed)
+                    t.IsArmed = false;
+            }
         }
     }
 

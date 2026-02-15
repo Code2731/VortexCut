@@ -80,7 +80,7 @@
             <Slider x:Name="ScrubSlider"
                     Minimum="0"
                     Maximum="{Binding SourceMonitor.DurationMs}"
-                    Value="{Binding SourceMonitor.CurrentTimeMs, Mode=OneWay}"
+                    Value="{Binding SourceMonitor.CurrentTimeMs, Mode=TwoWay}"
                     IsEnabled="{Binding SourceMonitor.HasClip}"
                     Height="20"/>
         </Border>

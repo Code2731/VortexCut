@@ -8,13 +8,39 @@
              x:Class="VortexCut.UI.Views.ProjectBinView"
              x:DataType="vm:ProjectBinViewModel">
 
-    <Grid>
+    <Grid RowDefinitions="Auto,*">
+        <!-- Search Bar -->
+        <Border Grid.Row="0" Background="{StaticResource BgPanelBrush}" Padding="6,4" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderBrush}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox Text="{Binding SearchText, Mode=TwoWay}"
+                         Watermark="Search media..."
+                         FontSize="12"
+                         Padding="6,4"
+                         Background="{StaticResource BgBaseBrush}"
+                         Foreground="{StaticResource TextPrimaryBrush}"
+                         BorderThickness="1"
+                         BorderBrush="{StaticResource BorderBrush}"
+                         CornerRadius="3"/>
+                <Button Grid.Column="1"
+                        Command="{Binding ClearSearchCommand}"
+                        IsVisible="{Binding HasSearchText}"
+                        Classes="ToolButton"
+                        Padding="4"
+                        Margin="4,0,0,0"
+                        ToolTip.Tip="Clear search">
+                    <TextBlock Text="X" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"/>
+                </Button>
+            </Grid>
+        </Border>
+
         <!-- Media List -->
         <ListBox x:Name="MediaListBox"
-                 ItemsSource="{Binding MediaItems}"
+                 Grid.Row="1"
+                 ItemsSource="{Binding FilteredMediaItems}"
                  SelectedItem="{Binding SelectedItem}"
                  Background="{StaticResource BgPanelBrush}"
-                 BorderThickness="0">
+                 BorderThickness="0"
+                 DoubleTapped="OnMediaItemDoubleTapped">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Border Padding="5" Margin="0,1" CornerRadius="2" Background="Transparent">
@@ -59,6 +85,7 @@
 
         <!-- Empty State (MediaItems가 비어있고 로딩 중이 아닐 때) -->
         <Border x:Name="EmptyState"
+                Grid.Row="1"
                 Background="{StaticResource BgPanelBrush}"
                 IsVisible="{Binding IsEmpty}">
             <StackPanel HorizontalAlignment="Center"
@@ -97,6 +124,7 @@
 
         <!-- Loading State (미디어 임포트 중, 아직 미디어가 하나도 없을 때만 전체 오버레이) -->
         <Border x:Name="LoadingState"
+                Grid.Row="1"
                 Background="{StaticResource BgPanelBrush}"
                 IsVisible="{Binding ShowLoadingOverlay}">
             <StackPanel Spacing="12" Margin="12">

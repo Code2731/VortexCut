@@ -109,34 +109,11 @@ public class GraphEditor : Control
     {
         base.Render(context);
 
-        // 1. 프로페셔널 그라디언트 배경 (After Effects 스타일)
-        var backgroundGradient = new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-            GradientStops = new GradientStops
-            {
-                new GradientStop(Color.Parse("#252527"), 0),
-                new GradientStop(Color.Parse("#1E1E20"), 0.5),
-                new GradientStop(Color.Parse("#181A18"), 1)
-            }
-        };
-        context.FillRectangle(backgroundGradient, Bounds);
+        // 1. 프로페셔널 그라디언트 배경 (캐시된 불변 브러시)
+        context.FillRectangle(RenderResourceCache.GraphBgGradient, Bounds);
 
-        // 2. 미묘한 비네팅 효과 (가장자리 어둡게)
-        var vignetteBrush = new RadialGradientBrush
-        {
-            Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-            GradientOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-            RadiusX = RelativeScalar.Parse("80%"),
-            RadiusY = RelativeScalar.Parse("80%"),
-            GradientStops = new GradientStops
-            {
-                new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.3),
-                new GradientStop(Color.FromArgb(40, 0, 0, 0), 1)
-            }
-        };
-        context.FillRectangle(vignetteBrush, Bounds);
+        // 2. 미묘한 비네팅 효과 (캐시된 불변 브러시)
+        context.FillRectangle(RenderResourceCache.GraphVignetteBrush, Bounds);
 
         // 3. 그리드
         DrawGrid(context);
@@ -165,10 +142,10 @@ public class GraphEditor : Control
 
     private void DrawGrid(DrawingContext context)
     {
-        // 프로페셔널 다층 그리드 (After Effects 스타일)
-        var microGridPen = new Pen(new SolidColorBrush(Color.FromArgb(20, 80, 80, 80)), 0.5);
-        var minorGridPen = new Pen(new SolidColorBrush(Color.FromArgb(40, 100, 100, 100)), 0.8);
-        var majorGridPen = new Pen(new SolidColorBrush(Color.FromArgb(80, 120, 120, 120)), 1.2);
+        // 프로페셔널 다층 그리드 (캐시된 펜)
+        var microGridPen = RenderResourceCache.GraphMicroGridPen;
+        var minorGridPen = RenderResourceCache.GraphMinorGridPen;
+        var majorGridPen = RenderResourceCache.GraphMajorGridPen;
 
         double microSpacing = GridSpacing / 4;
         double minorSpacing = GridSpacing;
@@ -211,62 +188,28 @@ public class GraphEditor : Control
 
     private void DrawAxes(DrawingContext context)
     {
-        // X축 (시간) - 프로페셔널 스타일
+        // X축 (시간) - 캐시된 펜 사용
         double y0 = ModelToScreen(0, 0).Y;
         if (y0 >= 0 && y0 <= Bounds.Height)
         {
-            // 축 그림자
-            var xAxisShadowPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
-                3);
-            context.DrawLine(xAxisShadowPen,
-                new Point(0, y0 + 1),
-                new Point(Bounds.Width, y0 + 1));
-
-            // 축 본체 (밝은 회색)
-            var xAxisPen = new Pen(
-                new SolidColorBrush(Color.FromRgb(150, 150, 150)),
-                2.5);
-            context.DrawLine(xAxisPen,
-                new Point(0, y0),
-                new Point(Bounds.Width, y0));
-
-            // 축 하이라이트 (상단)
-            var xAxisHighlightPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)),
-                1);
-            context.DrawLine(xAxisHighlightPen,
-                new Point(0, y0 - 1),
-                new Point(Bounds.Width, y0 - 1));
+            context.DrawLine(RenderResourceCache.GraphAxisShadowPen,
+                new Point(0, y0 + 1), new Point(Bounds.Width, y0 + 1));
+            context.DrawLine(RenderResourceCache.GraphAxisBodyPen,
+                new Point(0, y0), new Point(Bounds.Width, y0));
+            context.DrawLine(RenderResourceCache.GraphAxisHighlightPen,
+                new Point(0, y0 - 1), new Point(Bounds.Width, y0 - 1));
         }
 
-        // Y축 (값) - 프로페셔널 스타일
+        // Y축 (값) - 캐시된 펜 사용
         double x0 = ModelToScreen(0, 0).X;
         if (x0 >= 0 && x0 <= Bounds.Width)
         {
-            // 축 그림자
-            var yAxisShadowPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
-                3);
-            context.DrawLine(yAxisShadowPen,
-                new Point(x0 + 1, 0),
-                new Point(x0 + 1, Bounds.Height));
-
-            // 축 본체 (밝은 회색)
-            var yAxisPen = new Pen(
-                new SolidColorBrush(Color.FromRgb(150, 150, 150)),
-                2.5);
-            context.DrawLine(yAxisPen,
-                new Point(x0, 0),
-                new Point(x0, Bounds.Height));
-
-            // 축 하이라이트 (왼쪽)
-            var yAxisHighlightPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(60, 255, 255, 255)),
-                1);
-            context.DrawLine(yAxisHighlightPen,
-                new Point(x0 - 1, 0),
-                new Point(x0 - 1, Bounds.Height));
+            context.DrawLine(RenderResourceCache.GraphAxisShadowPen,
+                new Point(x0 + 1, 0), new Point(x0 + 1, Bounds.Height));
+            context.DrawLine(RenderResourceCache.GraphAxisBodyPen,
+                new Point(x0, 0), new Point(x0, Bounds.Height));
+            context.DrawLine(RenderResourceCache.GraphAxisHighlightPen,
+                new Point(x0 - 1, 0), new Point(x0 - 1, Bounds.Height));
         }
     }
 
@@ -303,10 +246,8 @@ public class GraphEditor : Control
             }
         }
 
-        // 곡선 그림자 (깊이감)
-        var shadowPen = new Pen(
-            new SolidColorBrush(Color.FromArgb(120, 0, 0, 0)),
-            3.5);
+        // 곡선 그림자 (캐시된 펜)
+        var shadowPen = RenderResourceCache.GraphCurveShadowPen;
 
         var shadowGeometry = new StreamGeometry();
         using (var ctx = shadowGeometry.Open())
@@ -333,16 +274,9 @@ public class GraphEditor : Control
         }
         context.DrawGeometry(null, shadowPen, shadowGeometry);
 
-        // 곡선 본체 (밝은 시안 + 글로우)
-        var glowPen = new Pen(
-            new SolidColorBrush(Color.FromArgb(60, 80, 220, 255)),
-            5);
-        context.DrawGeometry(null, glowPen, geometry);
-
-        var curvePen = new Pen(
-            new SolidColorBrush(Color.FromRgb(80, 220, 255)),
-            2.5);
-        context.DrawGeometry(null, curvePen, geometry);
+        // 곡선 본체 (캐시된 펜)
+        context.DrawGeometry(null, RenderResourceCache.GraphCurveGlowPen, geometry);
+        context.DrawGeometry(null, RenderResourceCache.GraphCurveBodyPen, geometry);
     }
 
     private void DrawKeyframePoints(DrawingContext context)
@@ -359,49 +293,31 @@ public class GraphEditor : Control
             bool isSelected = keyframe == _selectedKeyframe;
             var radius = isSelected ? 7.0 : 5.0;
 
-            // 키프레임 그림자
+            // 키프레임 그림자 (캐시된 브러시)
             var shadowRadius = radius + 1.5;
             var shadowPoint = new Point(centerPoint.X + 1.5, centerPoint.Y + 1.5);
             context.DrawEllipse(
-                new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
-                null,
-                shadowPoint,
-                shadowRadius,
-                shadowRadius);
+                RenderResourceCache.GraphKfShadowBrush, null,
+                shadowPoint, shadowRadius, shadowRadius);
 
             // 키프레임 글로우 (선택된 경우)
             if (isSelected)
             {
                 var glowRadius = radius + 4;
                 context.DrawEllipse(
-                    new SolidColorBrush(Color.FromArgb(80, 255, 220, 80)),
-                    null,
-                    centerPoint,
-                    glowRadius,
-                    glowRadius);
+                    RenderResourceCache.GraphKfGlowBrush, null,
+                    centerPoint, glowRadius, glowRadius);
             }
 
-            // 키프레임 본체 (그라디언트)
-            Color innerColor = isSelected ? Color.FromRgb(255, 240, 100) : Color.FromRgb(255, 255, 255);
-            Color outerColor = isSelected ? Color.FromRgb(255, 200, 60) : Color.FromRgb(200, 200, 200);
+            // 키프레임 본체 (캐시된 브러시 — RadialGradient는 동적 색상이므로 SolidColor로 대체)
+            var fillBrush = isSelected
+                ? RenderResourceCache.GraphKfSelectedInnerBrush
+                : RenderResourceCache.GraphKfNormalInnerBrush;
+            var borderPen = isSelected
+                ? RenderResourceCache.GraphKfSelectedBorderPen
+                : RenderResourceCache.GraphKfNormalBorderPen;
 
-            var gradientBrush = new RadialGradientBrush
-            {
-                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-                GradientOrigin = new RelativePoint(0.3, 0.3, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(innerColor, 0),
-                    new GradientStop(outerColor, 1)
-                }
-            };
-
-            context.DrawEllipse(
-                gradientBrush,
-                new Pen(new SolidColorBrush(isSelected ? Color.FromRgb(255, 180, 40) : Color.FromRgb(100, 100, 100)), 2),
-                centerPoint,
-                radius,
-                radius);
+            context.DrawEllipse(fillBrush, borderPen, centerPoint, radius, radius);
         }
     }
 
@@ -409,108 +325,42 @@ public class GraphEditor : Control
     {
         var centerPoint = ModelToScreen(keyframe.Time, keyframe.Value);
 
-        // OutHandle (초록색)
+        // OutHandle (초록색) — 캐시된 리소스 사용
         if (keyframe.OutHandle != null)
         {
             var handleTime = keyframe.Time + keyframe.OutHandle.TimeOffset;
             var handleValue = keyframe.Value + keyframe.OutHandle.ValueOffset;
             var handlePoint = ModelToScreen(handleTime, handleValue);
 
-            // 핸들 라인 그림자
-            var lineShadowPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
-                2.5);
-            context.DrawLine(lineShadowPen,
+            context.DrawLine(RenderResourceCache.GraphHandleLineShadowPen,
                 new Point(centerPoint.X + 1, centerPoint.Y + 1),
                 new Point(handlePoint.X + 1, handlePoint.Y + 1));
+            context.DrawLine(RenderResourceCache.GraphHandleLinePen, centerPoint, handlePoint);
 
-            // 핸들 라인 본체 (점선)
-            var linePen = new Pen(
-                new SolidColorBrush(Color.FromRgb(180, 180, 180)),
-                2)
-            {
-                DashStyle = new DashStyle(new double[] { 3, 3 }, 0)
-            };
-            context.DrawLine(linePen, centerPoint, handlePoint);
-
-            // 핸들 포인트 그림자
             var handleShadowPoint = new Point(handlePoint.X + 1.5, handlePoint.Y + 1.5);
-            context.DrawEllipse(
-                new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
-                null,
-                handleShadowPoint,
-                6.5,
-                6.5);
-
-            // 핸들 포인트 본체 (그라디언트 초록)
-            var handleGradient = new RadialGradientBrush
-            {
-                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-                GradientOrigin = new RelativePoint(0.3, 0.3, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(Color.FromRgb(150, 255, 150), 0),
-                    new GradientStop(Color.FromRgb(80, 200, 80), 1)
-                }
-            };
-            context.DrawEllipse(
-                handleGradient,
-                new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 2),
-                handlePoint,
-                6,
-                6);
+            context.DrawEllipse(RenderResourceCache.GraphKfShadowBrush, null,
+                handleShadowPoint, 6.5, 6.5);
+            context.DrawEllipse(RenderResourceCache.GraphHandleOutGradient,
+                RenderResourceCache.GraphHandleBorderPen, handlePoint, 6, 6);
         }
 
-        // InHandle (빨간색)
+        // InHandle (빨간색) — 캐시된 리소스 사용
         if (keyframe.InHandle != null)
         {
             var handleTime = keyframe.Time + keyframe.InHandle.TimeOffset;
             var handleValue = keyframe.Value + keyframe.InHandle.ValueOffset;
             var handlePoint = ModelToScreen(handleTime, handleValue);
 
-            // 핸들 라인 그림자
-            var lineShadowPen = new Pen(
-                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
-                2.5);
-            context.DrawLine(lineShadowPen,
+            context.DrawLine(RenderResourceCache.GraphHandleLineShadowPen,
                 new Point(centerPoint.X + 1, centerPoint.Y + 1),
                 new Point(handlePoint.X + 1, handlePoint.Y + 1));
+            context.DrawLine(RenderResourceCache.GraphHandleLinePen, centerPoint, handlePoint);
 
-            // 핸들 라인 본체 (점선)
-            var linePen = new Pen(
-                new SolidColorBrush(Color.FromRgb(180, 180, 180)),
-                2)
-            {
-                DashStyle = new DashStyle(new double[] { 3, 3 }, 0)
-            };
-            context.DrawLine(linePen, centerPoint, handlePoint);
-
-            // 핸들 포인트 그림자
             var handleShadowPoint = new Point(handlePoint.X + 1.5, handlePoint.Y + 1.5);
-            context.DrawEllipse(
-                new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
-                null,
-                handleShadowPoint,
-                6.5,
-                6.5);
-
-            // 핸들 포인트 본체 (그라디언트 빨강)
-            var handleGradient = new RadialGradientBrush
-            {
-                Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-                GradientOrigin = new RelativePoint(0.3, 0.3, RelativeUnit.Relative),
-                GradientStops = new GradientStops
-                {
-                    new GradientStop(Color.FromRgb(255, 150, 150), 0),
-                    new GradientStop(Color.FromRgb(200, 80, 80), 1)
-                }
-            };
-            context.DrawEllipse(
-                handleGradient,
-                new Pen(new SolidColorBrush(Color.FromRgb(255, 255, 255)), 2),
-                handlePoint,
-                6,
-                6);
+            context.DrawEllipse(RenderResourceCache.GraphKfShadowBrush, null,
+                handleShadowPoint, 6.5, 6.5);
+            context.DrawEllipse(RenderResourceCache.GraphHandleInGradient,
+                RenderResourceCache.GraphHandleBorderPen, handlePoint, 6, 6);
         }
     }
 

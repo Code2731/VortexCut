@@ -216,6 +216,22 @@ public partial class MainWindow : Window
                 }
                 break;
 
+            case Key.X:
+                if (isCtrl)
+                {
+                    _viewModel.Timeline.CutSelectedClipsCommand.Execute(null);
+                    e.Handled = true;
+                }
+                break;
+
+            case Key.V:
+                if (isCtrl)
+                {
+                    _viewModel.Timeline.PasteClipsCommand.Execute(null);
+                    e.Handled = true;
+                }
+                break;
+
             // 재생
             case Key.Space:
                 // Space: 재생/일시정지
@@ -237,6 +253,12 @@ public partial class MainWindow : Window
                     _ = _viewModel.OpenVideoFileCommand.ExecuteAsync(null);
                     e.Handled = true;
                 }
+                else if (_viewModel.Timeline.IsPlaying)
+                {
+                    // 재생 중 I: 다이나믹 트림 (왼쪽 에지)
+                    _viewModel.Timeline.DynamicTrimIn();
+                    e.Handled = true;
+                }
                 else
                 {
                     // I: In 포인트 설정
@@ -246,8 +268,16 @@ public partial class MainWindow : Window
                 break;
 
             case Key.O:
-                // O: Out 포인트 설정
-                _viewModel.Timeline.SetOutPoint(_viewModel.Timeline.CurrentTimeMs);
+                if (_viewModel.Timeline.IsPlaying)
+                {
+                    // 재생 중 O: 다이나믹 트림 (오른쪽 에지)
+                    _viewModel.Timeline.DynamicTrimOut();
+                }
+                else
+                {
+                    // O: Out 포인트 설정
+                    _viewModel.Timeline.SetOutPoint(_viewModel.Timeline.CurrentTimeMs);
+                }
                 e.Handled = true;
                 break;
 
@@ -261,9 +291,15 @@ public partial class MainWindow : Window
                 }
                 break;
 
-            // Razor 모드 토글
+            // Razor 모드 토글 / Copy
             case Key.C:
-                if (!isCtrl && !isShift)
+                if (isCtrl)
+                {
+                    // Ctrl+C: 클립 복사
+                    _viewModel.Timeline.CopySelectedClipsCommand.Execute(null);
+                    e.Handled = true;
+                }
+                else if (!isShift)
                 {
                     // C: Razor 모드 토글 (Cut)
                     _viewModel.Timeline.RazorModeEnabled = !_viewModel.Timeline.RazorModeEnabled;
@@ -289,7 +325,39 @@ public partial class MainWindow : Window
                     e.Handled = true;
                 }
                 break;
+
+            // 트랙 Arm (1-6: V1-V6, Alt+1-6: A1-A6)
+            case Key.D1: case Key.D2: case Key.D3:
+            case Key.D4: case Key.D5: case Key.D6:
+                if (!isCtrl && !isShift)
+                {
+                    int trackNum = e.Key - Key.D1; // 0-based
+                    if (isAlt)
+                        ArmTrack(_viewModel.Timeline.AudioTracks, trackNum);
+                    else
+                        ArmTrack(_viewModel.Timeline.VideoTracks, trackNum);
+                    e.Handled = true;
+                }
+                break;
         }
+    }
+
+    /// <summary>
+    /// 트랙 Arm 토글 (상호배타: 같은 타입 중 1개만)
+    /// </summary>
+    private void ArmTrack(System.Collections.ObjectModel.ObservableCollection<VortexCut.Core.Models.TrackModel> tracks, int index)
+    {
+        if (index >= tracks.Count) return;
+
+        bool wasArmed = tracks[index].IsArmed;
+
+        // 모든 동일 타입 트랙 해제
+        foreach (var t in tracks)
+            t.IsArmed = false;
+
+        // 토글: 이미 armed였으면 해제만, 아니었으면 arm
+        if (!wasArmed)
+            tracks[index].IsArmed = true;
     }
 
     /// <summary>

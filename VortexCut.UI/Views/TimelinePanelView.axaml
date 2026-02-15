@@ -32,11 +32,25 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Zoom Level Indicator -->
-                    <Border Background="{StaticResource BgDarkBrush}" CornerRadius="3" Padding="8,3">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <mi:MaterialIcon Kind="Magnify" Width="12" Height="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                            <TextBlock Text="100%" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center"/>
+                    <!-- Zoom Control -->
+                    <Border Background="{StaticResource BgDarkBrush}" CornerRadius="3" Padding="4,2">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Button Classes="ToolButton" Command="{Binding Timeline.ZoomOutCommand}" ToolTip.Tip="Zoom Out" Padding="4,2" Width="24" Height="22">
+                                <mi:MaterialIcon Kind="Minus" Width="12" Height="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            </Button>
+                            <Slider Value="{Binding Timeline.ZoomPercent}"
+                                    Minimum="10" Maximum="500"
+                                    Width="100" Height="20"
+                                    VerticalAlignment="Center"/>
+                            <Button Classes="ToolButton" Command="{Binding Timeline.ZoomInCommand}" ToolTip.Tip="Zoom In" Padding="4,2" Width="24" Height="22">
+                                <mi:MaterialIcon Kind="Plus" Width="12" Height="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            </Button>
+                            <TextBlock Text="{Binding Timeline.ZoomPercentDisplay}"
+                                       Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" FontSize="11"
+                                       VerticalAlignment="Center" Width="36" TextAlignment="Right"/>
+                            <Button Classes="ToolButton" Command="{Binding Timeline.ZoomFitCommand}" ToolTip.Tip="Fit Timeline" Padding="4,2" Height="22">
+                                <TextBlock Text="Fit" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </Button>
                         </StackPanel>
                     </Border>
                 </StackPanel>

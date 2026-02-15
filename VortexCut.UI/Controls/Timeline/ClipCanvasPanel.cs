@@ -9,6 +9,7 @@ using VortexCut.Core.Models;
 using VortexCut.UI.ViewModels;
 using VortexCut.UI.Services;
 using VortexCut.UI.Services.Actions;
+using VortexCut.Interop.Services;
 
 namespace VortexCut.UI.Controls.Timeline;
 
@@ -54,6 +55,7 @@ public partial class ClipCanvasPanel : Control
     private long _lastSnappedTimeMs = -1;
     private bool _isTrimming;
     private ClipEdge _trimEdge = ClipEdge.None;
+    private ClipEdge _hoveredEdge = ClipEdge.None; // 호버된 트림 에지 (핸들 하이라이트용)
     private long _originalStartTimeMs;
     private long _originalDurationMs;
     private int _originalTrackIndex; // Undo용 원래 트랙 인덱스
@@ -94,6 +96,31 @@ public partial class ClipCanvasPanel : Control
     // 자막 트랙
     private List<TrackModel> _subtitleTracks = new();
 
+    // 호버 썸네일 프리뷰 (A)
+    private ThumbnailSession? _hoverThumbnailSession;
+    private string? _hoverSessionFilePath; // 세션 재사용 판단용
+    private Avalonia.Media.Imaging.WriteableBitmap? _hoverThumbnailBitmap;
+    private long _hoverThumbnailTimeMs = -1; // 현재 표시 중인 썸네일 시간
+    private Point _hoverThumbnailPos;        // 마우스 위치 (렌더 좌표)
+    private bool _hoverThumbnailVisible;
+    private CancellationTokenSource? _hoverDebounceTokenSource;
+    private int _hoverThumbnailRenderActive; // Interlocked 가드
+
+    // 트림 프리뷰 오버레이 (G)
+    private Avalonia.Media.Imaging.WriteableBitmap? _trimPreviewBitmap;
+    private long _trimPreviewTimeMs = -1;
+    private bool _trimPreviewVisible;
+    private int _trimPreviewRenderActive; // Interlocked 가드
+
+    // Swifter 스크럽 썸네일 그리드 (B)
+    private bool _isScrubbing;                 // 빈 공간 클릭+드래그 중
+    private bool _scrubGridVisible;
+    private Avalonia.Media.Imaging.WriteableBitmap?[] _scrubGridBitmaps = new Avalonia.Media.Imaging.WriteableBitmap?[8];
+    private long[] _scrubGridTimeMs = new long[8];
+    private long _scrubGridLastUpdateMs = -1;  // 마지막 갱신 시간
+    private int _scrubGridRenderActive;        // Interlocked 가드
+    private double _scrubGridY;                // 그리드 Y 위치
+
     /// <summary>
     /// 가상 스크롤 변경 콜백 (TimelineCanvas에서 설정, header 동기화용)
     /// </summary>
@@ -126,10 +153,23 @@ public partial class ClipCanvasPanel : Control
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(TimelineViewModel.IsPlaying) ||
-            e.PropertyName == nameof(TimelineViewModel.CurrentTimeMs))
+        if (e.PropertyName == nameof(TimelineViewModel.IsPlaying))
         {
             Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Render);
+        }
+        else if (e.PropertyName == nameof(TimelineViewModel.CurrentTimeMs))
+        {
+            // 재생 중 타임라인 리드로 스로틀: 플레이헤드가 2px 이상 이동했을 때만
+            if (_viewModel != null)
+            {
+                var newX = _viewModel.CurrentTimeMs * _pixelsPerMs - _scrollOffsetX;
+                var oldX = _lastPlayheadTimeMs * _pixelsPerMs - _scrollOffsetX;
+                if (Math.Abs(newX - oldX) >= 2.0)
+                {
+                    _lastPlayheadTimeMs = _viewModel.CurrentTimeMs;
+                    Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Render);
+                }
+            }
         }
     }
 

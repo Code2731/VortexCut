@@ -59,6 +59,12 @@ public class ClipModel
     [Browsable(false)]
     public long TrimStartMs { get; set; }
 
+    /// <summary>
+    /// 원본 소스 파일의 전체 길이 (ms). 트림 중 고스트 아웃라인 표시에 사용.
+    /// </summary>
+    [Browsable(false)]
+    public long SourceDurationMs { get; set; }
+
     // 클립 색상 라벨 (DaVinci Resolve 스타일)
     [Category("표시")]
     [DisplayName("색상 라벨 (ARGB)")]
@@ -160,4 +166,32 @@ public class ClipModel
     [DisplayName("종료 시간 (ms)")]
     [ReadOnly(true)]
     public long EndTimeMs => StartTimeMs + DurationMs;
+
+    /// <summary>
+    /// 클립 복사 (클립보드용)
+    /// </summary>
+    public virtual ClipModel Clone()
+    {
+        return new ClipModel
+        {
+            Id = Id,
+            FilePath = FilePath,
+            StartTimeMs = StartTimeMs,
+            DurationMs = DurationMs,
+            TrackIndex = TrackIndex,
+            ProxyFilePath = ProxyFilePath,
+            TrimStartMs = TrimStartMs,
+            SourceDurationMs = SourceDurationMs,
+            ColorLabelArgb = ColorLabelArgb,
+            Brightness = Brightness,
+            Contrast = Contrast,
+            Saturation = Saturation,
+            Temperature = Temperature,
+            Volume = Volume,
+            Speed = Speed,
+            FadeInMs = FadeInMs,
+            FadeOutMs = FadeOutMs,
+            TransitionType = TransitionType,
+        };
+    }
 }

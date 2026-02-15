@@ -1131,7 +1131,137 @@ if (width * height * 4 > MAX_FRAME_SIZE) {
 | Ctrl+클릭 | 다중 선택 | 클립/키프레임 추가 선택 |
 | Shift+드래그 | 축 고정 드래그 | X축 또는 Y축만 이동 |
 
-## 13. 참고 자료
+## 13. Phase 13: UI/UX 개선 (Quick Wins 번들) ✅
+
+### 13.1 Status Bar 실시간 데이터
+- 하드코딩 GPU/RAM 텍스트 → 타임라인 실시간 데이터 바인딩
+- **FPS**: PreviewViewModel.CurrentFps (Stopwatch + 프레임 카운터, 1초 윈도우)
+- **Duration**: TimelineViewModel.TotalDurationDisplay ("MM:SS")
+- **Clip Count**: TimelineViewModel.TotalClipCount
+- Clips.CollectionChanged → 프로퍼티 알림 자동 갱신
+
+### 13.2 Project Bin 검색 필터
+- ProjectBinView 상단 TextBox 검색바 + X 초기화 버튼
+- ProjectBinViewModel: SearchText + FilteredMediaItems (LINQ Where, 대소문자 무시)
+- ListBox.ItemsSource → FilteredMediaItems 바인딩
+
+### 13.3 클립 이펙트 뱃지 (C/S/F/T)
+- ClipCanvasPanel.ClipRendering.cs DrawEffectBadges()
+- Full LOD (width > 80px)에서 클립 우측 하단에 색상 점 표시:
+  - **C** (Color/Orange): 색보정 적용 여부
+  - **S** (Speed/Cyan): Speed ≠ 1.0
+  - **F** (Fade/Purple): FadeIn/Out > 0
+  - **T** (Transition/Green): TransitionType ≠ None
+- 자막 클립 제외
+
+### 13.4 재생 속도 컨트롤
+- ProgramMonitorView 속도 순환 버튼
+- 0.25x → 0.5x → 1x → 1.5x → 2x → 4x 순환
+- 재생 타이머: `elapsedMs * PlaybackSpeed`
+- 1.0x 아닌 속도에서 오디오 자동 뮤트
+
+### 13.5 타임라인 줌 슬라이더
+- TimelinePanelView: [-] + Slider(10~500%) + [+] + 퍼센트 텍스트 + [Fit] 버튼
+- ZoomPercent ↔ ZoomLevel 양방향 동기화 (ZoomLevel * 100 = ZoomPercent)
+- Fit 버튼: 전체 타임라인을 뷰포트에 맞춤 (TimelineCanvas.FitZoom)
+
+### 13.6 클립 우클릭 컨텍스트 메뉴 + 클립보드
+- ClipCanvasPanel.Input.cs: 우클릭 → ContextMenu 프로그래밍 생성
+- 메뉴: Cut(Ctrl+X) / Copy(Ctrl+C) / Paste(Ctrl+V) / Delete / Duplicate / Split at Playhead / Select All
+- 인메모리 클립보드: `List<ClipModel> _clipboard` + ClipModel.Clone()
+- Paste: Playhead 위치 기준 오프셋 계산
+- MainWindow.axaml.cs: Ctrl+X/C/V 키보드 단축키
+
+### 13.7 Inspector 숫자 직접 입력 (EditableValueText)
+- 신규 UserControl `EditableValueText.axaml` + `.cs`
+  - 기본: TextBlock 표시 → 더블클릭: TextBox 편집 모드
+  - Enter: 값 확정 / Escape: 취소 / 포커스 잃음: 확정
+  - StyledProperty: DisplayValue(string), IsEditing(bool)
+  - 이벤트: ValueCommitted(EventHandler<string>)
+- InspectorView.axaml: 11개 TextBlock → EditableValueText 교체
+  - Properties: StartTime, Duration, Opacity
+  - Color: Brightness, Contrast, Saturation, Temperature
+  - Audio: Volume, Speed, FadeIn, FadeOut
+- ValueCommitted 핸들러: 텍스트 파싱 → 슬라이더 값 업데이트 → 기존 SliderChanged 파이프라인 재활용
+- 시간 파싱: "MM:SS.mmm" 형식 + 순수 숫자(ms) + 소수점 초 지원
+
+### 13.8 단축키 매핑 (Phase 13 추가)
+
+| 단축키 | 기능 | 설명 |
+|--------|------|------|
+| Ctrl+X | 클립 잘라내기 | 선택 클립 복사 후 삭제 |
+| Ctrl+C | 클립 복사 | 선택 클립을 클립보드에 복사 |
+| Ctrl+V | 클립 붙여넣기 | 클립보드 내용을 Playhead 위치에 붙여넣기 |
+
+## 14. Phase 14: Advanced Video Editing UX (Swifter/IMG.LY/Premiere 기반) ✅
+
+3개 문서(Swifter CHI 2013, IMG.LY Timeline Design 2024, Adobe Premiere Best Practices) 분석 후 9개 UX 개선 구현.
+
+### 14.1 트림 중 스냅 피드백 (F)
+- 트림 에지(왼쪽/오른쪽) 이동 중 SnapService.GetSnapTarget 호출
+- DrawSnapGuideline 조건: `_isDragging || _isTrimming`
+- 최소 100ms 클립 길이 보장
+
+### 14.2 트림 핸들 시각 개선 (D)
+- 2px 라인 → 8px 그루브 핸들 (3개 수직 줄무늬)
+- `_hoveredEdge` 필드로 호버 상태 추적
+- HitTestEdge: 14px 안쪽 + 4px 바깥쪽 확장 감지
+- 호버 시 반투명 오렌지 배경 하이라이트
+
+### 14.3 타임라인 눈금 세분화 (H)
+- `_pixelsPerMs > 0.3`: 서브소눈금 점(DrawEllipse 1.2px)
+- `_pixelsPerMs > 0.5`: 프레임 번호 (`:01`, `:02` 형식, 8pt)
+- `intervalMs <= 200`: 소수점 초 표시 ("0:03.50")
+
+### 14.4 고스트 아웃라인 (E)
+- 트림 중 반투명 점선 사각형으로 원본 소스 범위 표시
+- 왼쪽: TrimStartMs 확장 가능 영역 (`-{time}` 라벨)
+- 오른쪽: SourceDurationMs - TrimStartMs - DurationMs 확장 영역 (`+{time}` 라벨)
+- RazorSplitAction에서 SourceDurationMs 양쪽 클립에 보존
+
+### 14.5 호버 썸네일 프리뷰 (A)
+- 클립 호버 200ms 디바운스 → 160x90 썸네일 팝업
+- ThumbnailSession 재사용 (같은 파일이면 세션 유지)
+- Interlocked.CompareExchange 가드 (단일 렌더 슬롯)
+- 드래그/트림/재생 중 비활성화
+- SMPTE 타임코드 라벨 + 그림자
+
+### 14.6 3-Point 편집 + 트랙 패칭 (J)
+- TrackModel.IsArmed 프로퍼티 (같은 타입 1개만 상호배타)
+- TrackHeaderControl에 "A" 토글 버튼 (주황색 활성)
+- FindInsertPosition: Armed 트랙 우선 탐색 → 기존 로직 폴백
+- 키보드 1-6: V1-V6 arm, Alt+1-6: A1-A6 arm (토글)
+- ClipCanvasPanel: armed 트랙에 3px 주황 좌측 바
+
+### 14.7 트림 프리뷰 오버레이 (G)
+- 트림 중 클립 위 160x90 에지 프레임 프리뷰
+- 30ms 이상 변화 시만 갱신 (과도한 FFI 호출 방지)
+- 왼쪽 에지: TrimStartMs 위치 프레임 (IN 라벨)
+- 오른쪽 에지: TrimStartMs + DurationMs 위치 프레임 (OUT 라벨)
+- 호버 세션 공유 (ThumbnailSession)
+
+### 14.8 다이나믹 트리밍 (I)
+- 재생 중 I 키: 플레이헤드 아래 클립 왼쪽 트림 (TrimStartMs 보정)
+- 재생 중 O 키: 플레이헤드 아래 클립 오른쪽 트림
+- FindClipUnderPlayhead: Armed 트랙 우선 → V1부터 순서대로
+- UndoRedo 기록 (TrimClipAction)
+
+### 14.9 Swifter 스크럽 썸네일 그리드 (B)
+- 빈 공간 클릭+드래그 시 4x2 (8프레임) 그리드 팝업
+- 간격: 뷰포트 기준 자동 계산 (viewDuration / 16)
+- 500ms 이상 변화 시 갱신 (배경 생성 + Interlocked 가드)
+- 인덱스 3 = 현재 위치 (주황 테두리 하이라이트)
+- 포인터 릴리즈 시 그리드 해제
+
+### 14.10 단축키 매핑 (Phase 14 추가)
+| 키 | 기능 |
+|---|---|
+| 1-6 | V1-V6 트랙 Arm 토글 |
+| Alt+1-6 | A1-A6 트랙 Arm 토글 |
+| I (재생 중) | 다이나믹 트림 In |
+| O (재생 중) | 다이나믹 트림 Out |
+
+## 15. 참고 자료
 
 ### 공식 문서
 - [Rust FFI Omnibus](http://jakegoulding.com/rust-ffi-omnibus/)
@@ -1152,6 +1282,6 @@ if (width * height * 4 > MAX_FRAME_SIZE) {
 
 ---
 
-**마지막 업데이트**: 2026-02-16 (Phase 12 완료: 코드 모듈화 리팩토링)
+**마지막 업데이트**: 2026-02-16 (Phase 14 완료: Advanced Video Editing UX)
 **작성자**: Claude Sonnet 4.5 / Claude Opus 4.6
-**Phase 12 내용**: 순수 구조 리팩토링 — MainWindow(-43%), ProjectService(-60%) code-behind → ViewModel, God Object 분할
+**Phase 14 내용**: 트림 스냅/핸들/프리뷰, 고스트 아웃라인, 호버 썸네일, 3-Point 편집, 다이나믹 트리밍, Swifter 스크럽 그리드
