@@ -97,11 +97,14 @@ pub extern "C" fn timeline_add_audio_track(
 }
 
 /// 비디오 클립 추가
+/// file_path: 원본 경로 (Export, 오디오용)
+/// proxy_path: 프리뷰용 Proxy 경로 (null이면 원본만 사용)
 #[no_mangle]
 pub extern "C" fn timeline_add_video_clip(
     timeline: *mut std::ffi::c_void,
     track_id: u64,
     file_path: *const c_char,
+    proxy_path: *const c_char,
     start_time_ms: i64,
     duration_ms: i64,
     out_clip_id: *mut u64,
@@ -123,6 +126,17 @@ pub extern "C" fn timeline_add_video_clip(
 
     let path = PathBuf::from(path_str);
 
+    let proxy = if proxy_path.is_null() {
+        None
+    } else {
+        unsafe {
+            match CStr::from_ptr(proxy_path).to_str() {
+                Ok(s) if !s.is_empty() => Some(PathBuf::from(s)),
+                _ => None,
+            }
+        }
+    };
+
     unsafe {
         let timeline_arc = &*(timeline as *const Mutex<Timeline>);
         let mut timeline = match timeline_arc.lock() {
@@ -130,7 +144,7 @@ pub extern "C" fn timeline_add_video_clip(
             Err(_) => return ERROR_INVALID_PARAM,
         };
 
-        match timeline.add_video_clip(track_id, path, start_time_ms, duration_ms) {
+        match timeline.add_video_clip(track_id, path, start_time_ms, duration_ms, proxy) {
             Some(clip_id) => {
                 *out_clip_id = clip_id;
                 ERROR_SUCCESS

@@ -31,4 +31,10 @@ public interface IAudioPlaybackService : IDisposable
     /// 오디오 재개
     /// </summary>
     void Resume();
+
+    /// <summary>
+    /// 현재 오디오 재생 위치 (ms) — cpal 출력 샘플 기준
+    /// 비활성 시 -1 반환
+    /// </summary>
+    long GetPositionMs();
 }

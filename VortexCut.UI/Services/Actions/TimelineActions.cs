@@ -224,7 +224,7 @@ public class RazorSplitAction : IUndoableAction
 
         // 새 클립 생성 (우측 부분) + Rust에 추가
         var rightClipId = _projectService.ReAddVideoClip(
-            _originalClip.FilePath, _cutTimeMs, rightDuration);
+            _originalClip.FilePath, _cutTimeMs, rightDuration, _originalClip.ProxyFilePath);
 
         _newClip = new ClipModel
         {

@@ -245,13 +245,8 @@ impl ExportJob {
             }
 
             // 자막 오버레이 합성 (있을 때만 RGBA 경로)
-            let has_subtitle = subtitles
-                .and_then(|s| s.get_active(timestamp_ms))
-                .is_some();
-
-            if has_subtitle {
+            if let Some(overlay) = subtitles.and_then(|s| s.get_active(timestamp_ms)) {
                 // 자막 프레임: YUV→RGBA 변환 → 알파 블렌딩 → RGBA 인코딩
-                let overlay = subtitles.unwrap().get_active(timestamp_ms).unwrap();
                 let mut rgba = if frame.is_yuv {
                     yuv420p_to_rgba(&frame.data, frame.width, frame.height)
                 } else {

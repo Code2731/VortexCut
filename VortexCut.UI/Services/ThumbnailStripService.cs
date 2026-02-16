@@ -253,24 +253,20 @@ public class ThumbnailStripService : IDisposable
     ///   Medium: 120×68×4 ≈ 33KB/장
     ///   High:   160×90×4 ≈ 58KB/장
     ///
-    /// intervalMs는 "Kdenlive 스타일" 연속 Filmstrip을 위해
-    /// duration에 비례하지 않고, 티어별 고정값에 가깝게 설정한다.
-    ///   - High   : 약 0.5~0.8초 간격
-    ///   - Medium : 약 1.2~1.8초 간격
-    ///   - Low    : 약 2.5~3.5초 간격
+    /// intervalMs는 Temporal Compression: 1초당 1프레임 위주로 CPU/GPU 절감
+    ///   - Low    : 1초 간격 (GOP 키프레임 위주)
+    ///   - Medium : 1초 간격
+    ///   - High   : 0.8초 간격 (확대 시 약간 밀도 높임)
     /// </summary>
     private static (uint thumbWidth, uint thumbHeight, long intervalMs) GetTierParams(
         ThumbnailTier tier, long durationMs)
     {
         return tier switch
         {
-            // Low: 축소 보기 - 2.5~3.5초 간격
-            ThumbnailTier.Low => (80, 45, Math.Clamp(3000, 2500, 3500)),
-            // Medium: 기본 줌 - 1.2~1.8초 간격
-            ThumbnailTier.Medium => (120, 68, Math.Clamp(1500, 1200, 1800)),
-            // High: 확대 보기 - 0.5~0.8초 간격
-            ThumbnailTier.High => (160, 90, Math.Clamp(700, 500, 800)),
-            _ => (120, 68, 1500)
+            ThumbnailTier.Low => (80, 45, 1000),
+            ThumbnailTier.Medium => (120, 68, 1000),
+            ThumbnailTier.High => (160, 90, 800),
+            _ => (120, 68, 1000)
         };
     }
 
@@ -468,6 +464,12 @@ public class ThumbnailStripService : IDisposable
             {
                 (clampedStart, clampedEnd) = (clampedEnd, clampedStart);
             }
+
+            // Viewport 양쪽 50% margin 프리페치 (스크롤 시 즉시 표시)
+            long viewportWidth = clampedEnd - clampedStart;
+            long margin = viewportWidth / 2;
+            clampedStart = Math.Max(0, clampedStart - margin);
+            clampedEnd = Math.Min(duration, clampedEnd + margin);
 
             long center = (clampedStart + clampedEnd) / 2;
 

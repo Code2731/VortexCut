@@ -174,8 +174,8 @@ mod tests {
     fn test_video_track_add_clip() {
         let mut track = VideoTrack::new(1, 0);
 
-        let clip1 = VideoClip::new(1, PathBuf::from("test1.mp4"), 0, 5000);
-        let clip2 = VideoClip::new(2, PathBuf::from("test2.mp4"), 5000, 3000);
+        let clip1 = VideoClip::new(1, PathBuf::from("test1.mp4"), 0, 5000, None);
+        let clip2 = VideoClip::new(2, PathBuf::from("test2.mp4"), 5000, 3000, None);
 
         track.add_clip(clip1);
         track.add_clip(clip2);
@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn test_video_track_remove_clip() {
         let mut track = VideoTrack::new(1, 0);
-        let clip = VideoClip::new(1, PathBuf::from("test.mp4"), 0, 5000);
+        let clip = VideoClip::new(1, PathBuf::from("test.mp4"), 0, 5000, None);
         track.add_clip(clip);
 
         assert_eq!(track.clips.len(), 1);
@@ -205,8 +205,8 @@ mod tests {
     fn test_video_track_get_clip_at_time() {
         let mut track = VideoTrack::new(1, 0);
 
-        let clip1 = VideoClip::new(1, PathBuf::from("test1.mp4"), 0, 5000);
-        let clip2 = VideoClip::new(2, PathBuf::from("test2.mp4"), 5000, 3000);
+        let clip1 = VideoClip::new(1, PathBuf::from("test1.mp4"), 0, 5000, None);
+        let clip2 = VideoClip::new(2, PathBuf::from("test2.mp4"), 5000, 3000, None);
 
         track.add_clip(clip1);
         track.add_clip(clip2);
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn test_track_disabled() {
         let mut track = VideoTrack::new(1, 0);
-        let clip = VideoClip::new(1, PathBuf::from("test.mp4"), 0, 5000);
+        let clip = VideoClip::new(1, PathBuf::from("test.mp4"), 0, 5000, None);
         track.add_clip(clip);
 
         track.enabled = false;

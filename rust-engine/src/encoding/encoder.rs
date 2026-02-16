@@ -584,9 +584,11 @@ impl VideoEncoder {
             audio_enc.send_eof()
                 .map_err(|e| format!("Failed to send audio EOF: {}", e))?;
 
-            // 잔여 오디오 패킷 기록
-            let audio_stream_idx = self.audio_stream_index.unwrap();
-            let audio_tb = self.audio_time_base.unwrap();
+            // 잔여 오디오 패킷 기록 (unwrap 제거 — init_audio 실패 시 안전)
+            let (audio_stream_idx, audio_tb) = match (self.audio_stream_index, self.audio_time_base) {
+                (Some(idx), Some(tb)) => (idx, tb),
+                _ => return Err("Audio stream not initialized".to_string()),
+            };
             let mut packet = ffmpeg::Packet::empty();
             while audio_enc.receive_packet(&mut packet).is_ok() {
                 packet.set_stream(audio_stream_idx);

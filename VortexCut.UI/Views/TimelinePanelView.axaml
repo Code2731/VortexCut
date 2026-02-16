@@ -57,18 +57,8 @@
 
                 <!-- Timeline Stats -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
-                    <Border Background="{StaticResource BgDarkBrush}" CornerRadius="3" Padding="8,3">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="Clips:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock Text="{Binding Timeline.Clips.Count}" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" FontSize="11"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgDarkBrush}" CornerRadius="3" Padding="8,3">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <TextBlock Text="FPS:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
-                            <TextBlock Text="30" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="11"/>
-                        </StackPanel>
-                    </Border>
+                    <controls:StatDisplayControl Label="Clips:" Value="{Binding Timeline.Clips.Count}"/>
+                    <controls:StatDisplayControl Label="FPS:" Value="30" ValueBrush="{StaticResource TextPrimaryBrush}"/>
                 </StackPanel>
             </Grid>
         </Border>

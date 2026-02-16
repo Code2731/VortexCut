@@ -130,6 +130,9 @@ public class ClipData
     [JsonPropertyName("filePath")]
     public string FilePath { get; set; } = string.Empty;
 
+    [JsonPropertyName("proxyFilePath")]
+    public string? ProxyFilePath { get; set; }
+
     [JsonPropertyName("startTimeMs")]
     public long StartTimeMs { get; set; }
 

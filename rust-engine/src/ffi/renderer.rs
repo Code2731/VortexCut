@@ -1,6 +1,6 @@
 // Renderer FFI - C# 연동
 
-use crate::rendering::Renderer;
+use crate::rendering::{Renderer, PlaybackEngine};
 use crate::timeline::Timeline;
 use crate::ffmpeg::Decoder;
 use crate::ffi::types::ErrorCode;
@@ -69,15 +69,13 @@ pub extern "C" fn renderer_render_frame(
     unsafe {
         let renderer_mutex = &*(renderer as *const Mutex<Renderer>);
 
-        let mut renderer_ref = match renderer_mutex.try_lock() {
-            Ok(r) => r,
-            Err(_) => {
-                // Mutex busy → 프레임 스킵 (출력 파라미터 초기화)
-                *out_width = 0;
-                *out_height = 0;
-                *out_data = std::ptr::null_mut();
-                *out_data_size = 0;
-                return ErrorCode::Success as i32;
+        // [수정] try_lock() 대신 lock()을 사용하여 락 획득 대기 (Mutex 기아 현상 해결)
+        // C# ThreadPool에서 호출되므로 대기해도 UI 프리징 없음
+        let mut renderer_ref = match renderer_mutex.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("renderer_render_frame: Mutex poisoned, recovering");
+                poisoned.into_inner()
             }
         };
 
@@ -112,6 +110,9 @@ pub extern "C" fn renderer_render_frame(
 /// 재생 모드 설정 (C# 재생 시작/정지 시 호출)
 /// playback=1: 재생 모드 (forward_threshold=5000ms, seek 대신 forward decode)
 /// playback=0: 스크럽 모드 (forward_threshold=100ms, 즉시 seek)
+/// CRITICAL: lock()으로 반드시 실행 보장
+/// try_lock() 사용 시 스크럽 렌더 진행 중에 호출되면 무시되어
+/// decoder_cache/frame_cache/last_rendered_frame flush 누락 → 이전 영상 표시 버그
 #[no_mangle]
 pub extern "C" fn renderer_set_playback_mode(renderer: *mut c_void, playback: i32) -> i32 {
     if renderer.is_null() {
@@ -120,17 +121,23 @@ pub extern "C" fn renderer_set_playback_mode(renderer: *mut c_void, playback: i3
 
     unsafe {
         let renderer_mutex = &*(renderer as *const Mutex<Renderer>);
-        match renderer_mutex.try_lock() {
+        match renderer_mutex.lock() {
             Ok(mut r) => {
                 r.set_playback_mode(playback != 0);
                 ErrorCode::Success as i32
             }
-            Err(_) => ErrorCode::Success as i32, // busy면 무시 (다음 프레임에서 적용)
+            Err(poisoned) => {
+                eprintln!("renderer_set_playback_mode: Mutex poisoned, recovering");
+                let mut r = poisoned.into_inner();
+                r.set_playback_mode(playback != 0);
+                ErrorCode::Success as i32
+            }
         }
     }
 }
 
 /// 프레임 캐시 클리어 (클립 편집 시 C#에서 호출)
+/// CRITICAL: lock()으로 반드시 실행 보장 (try_lock → 캐시 클리어 무시 → 이전 프레임 표시)
 #[no_mangle]
 pub extern "C" fn renderer_clear_cache(renderer: *mut c_void) -> i32 {
     if renderer.is_null() {
@@ -139,12 +146,17 @@ pub extern "C" fn renderer_clear_cache(renderer: *mut c_void) -> i32 {
 
     unsafe {
         let renderer_mutex = &*(renderer as *const Mutex<Renderer>);
-        match renderer_mutex.try_lock() {
+        match renderer_mutex.lock() {
             Ok(mut r) => {
                 r.clear_cache();
                 ErrorCode::Success as i32
             }
-            Err(_) => ErrorCode::Success as i32, // busy면 무시
+            Err(poisoned) => {
+                eprintln!("renderer_clear_cache: Mutex poisoned, recovering");
+                let mut r = poisoned.into_inner();
+                r.clear_cache();
+                ErrorCode::Success as i32
+            }
         }
     }
 }
@@ -319,4 +331,158 @@ pub extern "C" fn generate_video_thumbnail(
             }
         }
     }
+}
+
+// ============================================================
+// PlaybackEngine FFI (재생 전용 백그라운드 프리페치)
+// ============================================================
+
+/// PlaybackEngine 생성
+#[no_mangle]
+pub extern "C" fn playback_engine_create(
+    timeline: *mut c_void,
+    out_engine: *mut *mut c_void,
+) -> i32 {
+    if timeline.is_null() || out_engine.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let timeline_arc = Arc::from_raw(timeline as *const Mutex<Timeline>);
+        let timeline_clone = Arc::clone(&timeline_arc);
+        let _ = Arc::into_raw(timeline_arc); // 원본 소유권 유지
+
+        let engine = PlaybackEngine::new(timeline_clone);
+        let engine_mutex = Box::new(Mutex::new(engine));
+        *out_engine = Box::into_raw(engine_mutex) as *mut c_void;
+    }
+
+    ErrorCode::Success as i32
+}
+
+/// PlaybackEngine 시작 (백그라운드 프리페치 시작)
+/// CRITICAL: lock()으로 반드시 실행 보장 (try_lock → start 무시 = 이전 영상 재생 버그)
+#[no_mangle]
+pub extern "C" fn playback_engine_start(
+    engine: *mut c_void,
+    start_ms: i64,
+) -> i32 {
+    if engine.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let engine_mutex = &*(engine as *const Mutex<PlaybackEngine>);
+        match engine_mutex.lock() {
+            Ok(mut e) => {
+                e.start(start_ms);
+                ErrorCode::Success as i32
+            }
+            Err(poisoned) => {
+                // Mutex poisoned (이전 스레드 panic) → 복구 시도
+                eprintln!("playback_engine_start: Mutex poisoned, recovering");
+                let mut e = poisoned.into_inner();
+                e.start(start_ms);
+                ErrorCode::Success as i32
+            }
+        }
+    }
+}
+
+/// PlaybackEngine 정지 (백그라운드 스레드 종료)
+/// CRITICAL: lock()으로 반드시 실행 보장 (try_lock → stop 무시 = 이전 fill_loop 계속 실행)
+#[no_mangle]
+pub extern "C" fn playback_engine_stop(engine: *mut c_void) -> i32 {
+    if engine.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let engine_mutex = &*(engine as *const Mutex<PlaybackEngine>);
+        match engine_mutex.lock() {
+            Ok(mut e) => {
+                e.stop();
+                ErrorCode::Success as i32
+            }
+            Err(poisoned) => {
+                eprintln!("playback_engine_stop: Mutex poisoned, recovering");
+                let mut e = poisoned.into_inner();
+                e.stop();
+                ErrorCode::Success as i32
+            }
+        }
+    }
+}
+
+/// timestamp에 가장 가까운 프레임 조회 (디코딩 없음, 즉시 반환)
+/// out_actual_timestamp_ms: 큐에서 실제 매칭된 프레임의 timestamp (진단용)
+#[no_mangle]
+pub extern "C" fn playback_engine_try_get_frame(
+    engine: *mut c_void,
+    timestamp_ms: i64,
+    out_width: *mut u32,
+    out_height: *mut u32,
+    out_data: *mut *mut u8,
+    out_data_size: *mut usize,
+    out_actual_timestamp_ms: *mut i64,
+) -> i32 {
+    if engine.is_null() || out_width.is_null() || out_height.is_null()
+        || out_data.is_null() || out_data_size.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let engine_mutex = &*(engine as *const Mutex<PlaybackEngine>);
+
+        // try_lock으로 Mutex 경합 시 즉시 실패 (프레임 스킵)
+        let engine_ref = match engine_mutex.try_lock() {
+            Ok(e) => e,
+            Err(_) => {
+                *out_width = 0;
+                *out_height = 0;
+                *out_data = std::ptr::null_mut();
+                *out_data_size = 1; // 1 = engine mutex busy
+                if !out_actual_timestamp_ms.is_null() { *out_actual_timestamp_ms = -1; }
+                return ErrorCode::Success as i32;
+            }
+        };
+
+        match engine_ref.try_get_frame(timestamp_ms) {
+            Some(frame) => {
+                *out_width = frame.width;
+                *out_height = frame.height;
+                *out_data_size = frame.data.len();
+                if !out_actual_timestamp_ms.is_null() {
+                    *out_actual_timestamp_ms = frame.timestamp_ms;
+                }
+
+                let data_box = frame.data.into_boxed_slice();
+                *out_data = Box::into_raw(data_box) as *mut u8;
+
+                ErrorCode::Success as i32
+            }
+            None => {
+                *out_width = 0;
+                *out_height = 0;
+                *out_data = std::ptr::null_mut();
+                *out_data_size = 2; // 2 = queue empty or no match
+                if !out_actual_timestamp_ms.is_null() { *out_actual_timestamp_ms = -1; }
+                ErrorCode::Success as i32
+            }
+        }
+    }
+}
+
+/// PlaybackEngine 파괴
+#[no_mangle]
+pub extern "C" fn playback_engine_destroy(engine: *mut c_void) -> i32 {
+    if engine.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let _ = Box::from_raw(engine as *mut Mutex<PlaybackEngine>);
+    }
+
+    ErrorCode::Success as i32
 }

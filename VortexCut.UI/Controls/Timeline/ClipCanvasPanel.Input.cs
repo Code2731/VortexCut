@@ -177,8 +177,10 @@ public partial class ClipCanvasPanel
                 {
                     _viewModel.SelectedClips.Clear();
                     _viewModel.SelectedClip = null;
-                    long clickedTimeMs = XToTime(point.X);
-                    _viewModel.CurrentTimeMs = Math.Max(0, clickedTimeMs);
+                    long clickedTimeMs = Math.Max(0, XToTime(point.X));
+                    System.Diagnostics.Debug.WriteLine($"[SCRUB START] pointX={point.X:F1} → timeMs={clickedTimeMs}");
+                    _viewModel.CurrentTimeMs = clickedTimeMs;
+                    _viewModel.OnScrubRequested?.Invoke(clickedTimeMs);
                     _isScrubbing = true;
                     _scrubGridY = point.Y;
                 }
@@ -232,7 +234,9 @@ public partial class ClipCanvasPanel
         if (_isScrubbing && _viewModel != null)
         {
             long scrubTimeMs = Math.Max(0, XToTime(point.X));
+            System.Diagnostics.Debug.WriteLine($"[SCRUB MOVE] pointX={point.X:F1} → timeMs={scrubTimeMs}");
             _viewModel.CurrentTimeMs = scrubTimeMs;
+            _viewModel.OnScrubRequested?.Invoke(scrubTimeMs);
 
             // 500ms 이상 변화 시 그리드 갱신
             if (!_scrubGridVisible || Math.Abs(_scrubGridLastUpdateMs - scrubTimeMs) > 500)
@@ -407,6 +411,7 @@ public partial class ClipCanvasPanel
         // 스크럽 종료 (썸네일 그리드 해제)
         if (_isScrubbing)
         {
+            System.Diagnostics.Debug.WriteLine($"[SCRUB END]");
             _isScrubbing = false;
             _scrubGridVisible = false;
             _scrubGridLastUpdateMs = -1;
@@ -699,7 +704,11 @@ public partial class ClipCanvasPanel
         _hoverDebounceTokenSource = new CancellationTokenSource();
         var token = _hoverDebounceTokenSource.Token;
 
-        _ = DebounceHoverThumbnail(clip.FilePath, sourceTimeMs, mousePos, token);
+        // Proxy 파일 우선 사용 (재생과 일치)
+        var displayPath = !string.IsNullOrEmpty(clip.ProxyFilePath) && System.IO.File.Exists(clip.ProxyFilePath)
+            ? clip.ProxyFilePath
+            : clip.FilePath;
+        _ = DebounceHoverThumbnail(displayPath, sourceTimeMs, mousePos, token);
     }
 
     private async Task DebounceHoverThumbnail(string filePath, long sourceTimeMs, Point mousePos, CancellationToken token)
@@ -810,7 +819,11 @@ public partial class ClipCanvasPanel
         if (Interlocked.CompareExchange(ref _trimPreviewRenderActive, 1, 0) != 0)
             return;
 
-        _ = GenerateTrimPreview(clip.FilePath, edgeSourceTimeMs);
+        // Proxy 파일 우선 사용 (재생과 일치)
+        var displayPath = !string.IsNullOrEmpty(clip.ProxyFilePath) && System.IO.File.Exists(clip.ProxyFilePath)
+            ? clip.ProxyFilePath
+            : clip.FilePath;
+        _ = GenerateTrimPreview(displayPath, edgeSourceTimeMs);
     }
 
     private async Task GenerateTrimPreview(string filePath, long sourceTimeMs)
@@ -907,7 +920,11 @@ public partial class ClipCanvasPanel
         long viewDurationMs = XToTime(Bounds.Width) - XToTime(0);
         long intervalMs = Math.Max(100, viewDurationMs / 16);
 
-        _ = GenerateScrubGrid(sourceClip.FilePath, sourceClip, centerTimeMs, intervalMs);
+        // Proxy 파일 우선 사용 (재생과 일치)
+        var displayPath = !string.IsNullOrEmpty(sourceClip.ProxyFilePath) && System.IO.File.Exists(sourceClip.ProxyFilePath)
+            ? sourceClip.ProxyFilePath
+            : sourceClip.FilePath;
+        _ = GenerateScrubGrid(displayPath, sourceClip, centerTimeMs, intervalMs);
     }
 
     private async Task GenerateScrubGrid(string filePath, ClipModel sourceClip, long centerTimeMs, long intervalMs)

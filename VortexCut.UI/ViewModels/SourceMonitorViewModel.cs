@@ -108,8 +108,17 @@ public partial class SourceMonitorViewModel : ViewModelBase, IDisposable
 
     public SourceMonitorViewModel()
     {
-        _playbackTimer = new System.Timers.Timer(1000.0 / 30.0);
+        _playbackTimer = new System.Timers.Timer(1000.0 / PreviewSettings.PreviewFps);
         _playbackTimer.Elapsed += OnPlaybackTick;
+        PreviewSettings.PreviewFpsChanged += OnPreviewFpsChanged;
+    }
+
+    private void OnPreviewFpsChanged()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _playbackTimer.Interval = 1000.0 / PreviewSettings.PreviewFps;
+        });
     }
 
     /// <summary>
@@ -460,6 +469,7 @@ public partial class SourceMonitorViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        PreviewSettings.PreviewFpsChanged -= OnPreviewFpsChanged;
         _playbackTimer?.Dispose();
         _session?.Dispose();
         GC.SuppressFinalize(this);

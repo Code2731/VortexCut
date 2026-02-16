@@ -91,7 +91,7 @@ public class ProjectService : IProjectService
         System.Diagnostics.Debug.WriteLine($"📹 ProjectService.AddVideoClip: trackId={_defaultVideoTrackId}, filePath={filePath}");
         System.Diagnostics.Debug.WriteLine($"   startTimeMs={startTimeMs}, durationMs={durationMs}");
 
-        var clipId = _timelineService.AddVideoClip(_defaultVideoTrackId, filePath, startTimeMs, durationMs);
+        var clipId = _timelineService.AddVideoClip(_defaultVideoTrackId, filePath, startTimeMs, durationMs, proxyFilePath);
 
         System.Diagnostics.Debug.WriteLine($"   ✅ Rust returned clipId={clipId}");
 
@@ -142,12 +142,12 @@ public class ProjectService : IProjectService
     /// 비디오 클립 재추가 (Redo/Undo용) — 새 Rust clipId 반환
     /// _currentProject.Clips에도 추가하여 정합성 유지
     /// </summary>
-    public ulong ReAddVideoClip(string filePath, long startTimeMs, long durationMs)
+    public ulong ReAddVideoClip(string filePath, long startTimeMs, long durationMs, string? proxyFilePath = null)
     {
         if (_currentProject == null)
             throw new InvalidOperationException("No project is open");
 
-        var newId = _timelineService.AddVideoClip(_defaultVideoTrackId, filePath, startTimeMs, durationMs);
+        var newId = _timelineService.AddVideoClip(_defaultVideoTrackId, filePath, startTimeMs, durationMs, proxyFilePath);
         return newId;
     }
 
@@ -169,7 +169,7 @@ public class ProjectService : IProjectService
 
         // Rust에 새 클립 추가
         var newId = _timelineService.AddVideoClip(
-            _defaultVideoTrackId, clip.FilePath, clip.StartTimeMs, clip.DurationMs);
+            _defaultVideoTrackId, clip.FilePath, clip.StartTimeMs, clip.DurationMs, clip.ProxyFilePath);
         clip.Id = newId;
 
         // trim_start_ms가 0이 아닌 경우 Rust에 설정
@@ -294,6 +294,34 @@ public class ProjectService : IProjectService
     {
         try { _renderService.SetPlaybackMode(playback); }
         catch { /* Renderer 미생성 시 무시 */ }
+    }
+
+    // === PlaybackEngine (재생 전용 백그라운드 프리페치) ===
+
+    public void StartPlaybackEngine(long startMs)
+    {
+        if (_renderService is RenderService renderService)
+        {
+            renderService.ResetPlaybackDiag(); // 진단 카운터 리셋
+            renderService.StartPlaybackEngine(startMs);
+        }
+    }
+
+    public void StopPlaybackEngine()
+    {
+        if (_renderService is RenderService renderService)
+        {
+            renderService.StopPlaybackEngine();
+        }
+    }
+
+    public IRenderedFrame? TryGetPlaybackFrame(long timestampMs)
+    {
+        if (_renderService is RenderService renderService)
+        {
+            return renderService.TryGetPlaybackFrame(timestampMs);
+        }
+        return null;
     }
 
     public void Dispose()

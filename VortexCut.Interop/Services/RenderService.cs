@@ -213,11 +213,30 @@ public class RenderedFrame : IRenderedFrame
 }
 
 /// <summary>
+/// PlaybackEngine SafeHandle
+/// </summary>
+public class PlaybackEngineHandle : SafeHandle
+{
+    public PlaybackEngineHandle(IntPtr handle) : base(IntPtr.Zero, true)
+    {
+        SetHandle(handle);
+    }
+
+    public override bool IsInvalid => handle == IntPtr.Zero;
+
+    protected override bool ReleaseHandle()
+    {
+        return NativeMethods.playback_engine_destroy(handle) == ErrorCodes.SUCCESS;
+    }
+}
+
+/// <summary>
 /// 렌더링 서비스
 /// </summary>
 public class RenderService : IRenderService
 {
     private RendererHandle? _renderer;
+    private PlaybackEngineHandle? _playbackEngine;
     private bool _disposed;
 
     /// <summary>
@@ -241,6 +260,26 @@ public class RenderService : IRenderService
         CheckError(result);
 
         _renderer = new RendererHandle(rendererPtr);
+
+        // PlaybackEngine도 함께 생성 (임시로 주석 처리하여 앱 시작 확인)
+        try
+        {
+            result = NativeMethods.playback_engine_create(timelineHandle, out IntPtr enginePtr);
+            if (result == ErrorCodes.SUCCESS && enginePtr != IntPtr.Zero)
+            {
+                _playbackEngine = new PlaybackEngineHandle(enginePtr);
+                System.Diagnostics.Debug.WriteLine("   ✅ PlaybackEngine created successfully!");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"   ⚠️ PlaybackEngine creation failed: {result}");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"   ⚠️ PlaybackEngine not available: {ex.Message}");
+            // PlaybackEngine 없이도 앱은 동작 (재생은 기존 방식 사용)
+        }
     }
 
     /// <summary>
@@ -272,7 +311,26 @@ public class RenderService : IRenderService
         CheckError(result);
 
         _renderer = new RendererHandle(rendererPtr);
-        System.Diagnostics.Debug.WriteLine($"   ✅ Renderer created successfully!");
+
+        // PlaybackEngine도 함께 생성 (임시로 예외 처리)
+        try
+        {
+            result = NativeMethods.playback_engine_create(timelinePtr, out IntPtr enginePtr);
+            System.Diagnostics.Debug.WriteLine($"   playback_engine_create returned: {result}, enginePtr=0x{enginePtr:X}");
+            if (result == ErrorCodes.SUCCESS && enginePtr != IntPtr.Zero)
+            {
+                _playbackEngine = new PlaybackEngineHandle(enginePtr);
+                System.Diagnostics.Debug.WriteLine($"   ✅ Renderer + PlaybackEngine created successfully!");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"   ⚠️ PlaybackEngine creation failed, using Renderer only");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"   ⚠️ PlaybackEngine not available: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -280,6 +338,13 @@ public class RenderService : IRenderService
     /// </summary>
     public void DestroyRenderer()
     {
+        // PlaybackEngine 먼저 정지 및 해제
+        if (_playbackEngine != null && !_playbackEngine.IsInvalid)
+        {
+            _playbackEngine.Dispose();
+            _playbackEngine = null;
+        }
+
         if (_renderer != null && !_renderer.IsInvalid)
         {
             _renderer.Dispose();
@@ -483,6 +548,113 @@ public class RenderService : IRenderService
     /// 프레임 렌더링 (IRenderedFrame 반환 — IRenderService 인터페이스 구현)
     /// </summary>
     IRenderedFrame? IRenderService.RenderFrame(long timestampMs) => RenderFrame(timestampMs);
+
+    // === PlaybackEngine (재생 전용 백그라운드 프리페치) ===
+
+    /// <summary>
+    /// PlaybackEngine 시작 (백그라운드 프리페치 시작)
+    /// </summary>
+    public void StartPlaybackEngine(long startMs)
+    {
+        ThrowIfDisposed();
+
+        if (_playbackEngine == null || _playbackEngine.IsInvalid)
+        {
+            throw new InvalidOperationException("PlaybackEngine not initialized. Call CreateRenderer() first.");
+        }
+
+        IntPtr enginePtr = _playbackEngine.DangerousGetHandle();
+        int result = NativeMethods.playback_engine_start(enginePtr, startMs);
+        CheckError(result);
+
+        System.Diagnostics.Debug.WriteLine($"[PlaybackEngine] Started from {startMs}ms");
+    }
+
+    /// <summary>
+    /// PlaybackEngine 정지 (백그라운드 스레드 종료)
+    /// </summary>
+    public void StopPlaybackEngine()
+    {
+        ThrowIfDisposed();
+
+        if (_playbackEngine == null || _playbackEngine.IsInvalid)
+        {
+            return; // 이미 정지됨
+        }
+
+        IntPtr enginePtr = _playbackEngine.DangerousGetHandle();
+        int result = NativeMethods.playback_engine_stop(enginePtr);
+        CheckError(result);
+
+        System.Diagnostics.Debug.WriteLine($"[PlaybackEngine] Stopped");
+    }
+
+    /// <summary>
+    /// PlaybackEngine에서 프레임 조회 (디코딩 없음, 즉시 반환)
+    /// </summary>
+    // 프레임 데이터 진단 카운터 (첫 5프레임만 상세 로그)
+    private int _tryGetDiagCount = 0;
+
+    public RenderedFrame? TryGetPlaybackFrame(long timestampMs)
+    {
+        ThrowIfDisposed();
+
+        if (_playbackEngine == null || _playbackEngine.IsInvalid)
+        {
+            return null;
+        }
+
+        IntPtr enginePtr = _playbackEngine.DangerousGetHandle();
+
+        int result = NativeMethods.playback_engine_try_get_frame(
+            enginePtr,
+            timestampMs,
+            out uint width,
+            out uint height,
+            out IntPtr dataPtr,
+            out nuint dataSize,
+            out long actualTimestampMs);
+
+        CheckError(result);
+
+        // width=0 → 프레임 없음
+        if (width == 0 || height == 0)
+        {
+            var reason = (ulong)dataSize switch
+            {
+                1 => "ENGINE_MUTEX_BUSY",
+                2 => "QUEUE_EMPTY",
+                _ => $"UNKNOWN({(ulong)dataSize})"
+            };
+            System.Diagnostics.Debug.WriteLine($"[PlaybackEngine] MISS at {timestampMs}ms: {reason}");
+            return null;
+        }
+
+        // 진단: 첫 5프레임에 실제 timestamp + 첫 4바이트(RGBA) 로그
+        if (_tryGetDiagCount < 5)
+        {
+            _tryGetDiagCount++;
+            string pixelHex = "N/A";
+            if (dataPtr != IntPtr.Zero && (int)dataSize >= 4)
+            {
+                byte[] px = new byte[4];
+                Marshal.Copy(dataPtr, px, 0, 4);
+                pixelHex = $"{px[0]:X2}{px[1]:X2}{px[2]:X2}{px[3]:X2}";
+            }
+            System.Diagnostics.Debug.WriteLine(
+                $"[PlaybackEngine DIAG #{_tryGetDiagCount}] req={timestampMs}ms, actual={actualTimestampMs}ms, diff={timestampMs - actualTimestampMs}ms, px0={pixelHex}, {width}x{height}");
+        }
+
+        return new RenderedFrame(width, height, dataPtr, dataSize, actualTimestampMs);
+    }
+
+    /// <summary>
+    /// PlaybackEngine 진단 카운터 리셋 (재생 시작 시 호출)
+    /// </summary>
+    public void ResetPlaybackDiag()
+    {
+        _tryGetDiagCount = 0;
+    }
 
     private void ThrowIfDisposed()
     {

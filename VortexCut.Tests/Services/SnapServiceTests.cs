@@ -1,6 +1,9 @@
 using VortexCut.Core.Models;
+using VortexCut.Core.Interfaces;
 using VortexCut.UI.Services;
 using VortexCut.UI.ViewModels;
+using VortexCut.Interop.Services;
+using Moq;
 using Xunit;
 
 namespace VortexCut.Tests.Services;
@@ -12,7 +15,9 @@ public class SnapServiceTests
 {
     private TimelineViewModel CreateTimelineViewModel()
     {
-        var projectService = new ProjectService();
+        var mockRenderService = new Mock<IRenderService>();
+        var timelineService = new TimelineService();
+        var projectService = new ProjectService(mockRenderService.Object, timelineService);
         return new TimelineViewModel(projectService);
     }
 

@@ -3,7 +3,7 @@
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
@@ -38,6 +38,10 @@ pub struct AudioPlayback {
     cancelled: Arc<AtomicBool>,
     /// 백그라운드 디코딩 스레드
     fill_thread: Option<JoinHandle<()>>,
+    /// cpal 콜백에서 소비된 총 샘플 수 (stereo 프레임 기준)
+    consumed_samples: Arc<AtomicI64>,
+    /// 재생 시작 위치 (ms)
+    start_time_ms: i64,
 }
 
 /// 링 버퍼
@@ -64,24 +68,20 @@ impl AudioRingBuffer {
     }
 
     /// 출력 버퍼에 직접 복사 (할당 없음 — cpal 실시간 callback용)
-    /// VecDeque::as_slices()로 내부 슬라이스에서 직접 copy_from_slice
-    /// → Vec 할당 제거, 이중 복사 제거, lock 시간 최소화
-    fn fill_output(&mut self, output: &mut [f32]) {
+    /// 반환값: 소비한 f32 샘플 수 (stereo이면 프레임 수 = 반환값 / 2)
+    fn fill_output(&mut self, output: &mut [f32]) -> usize {
         let available = self.samples.len().min(output.len());
 
         if available > 0 {
-            // VecDeque는 내부적으로 원형 버퍼 → 최대 2개 연속 슬라이스
             let (front, back) = self.samples.as_slices();
             let mut written = 0;
 
-            // front 슬라이스에서 복사
             let front_copy = front.len().min(available);
             if front_copy > 0 {
                 output[..front_copy].copy_from_slice(&front[..front_copy]);
                 written += front_copy;
             }
 
-            // back 슬라이스에서 복사 (front만으로 부족한 경우)
             if written < available {
                 let back_copy = (available - written).min(back.len());
                 if back_copy > 0 {
@@ -91,14 +91,14 @@ impl AudioRingBuffer {
                 }
             }
 
-            // 소비한 샘플 제거 (VecDeque head 포인터 이동, 할당 없음)
             self.samples.drain(0..written);
         }
 
-        // 부족분은 무음으로 채움 (underrun 시 클릭 방지)
         for sample in &mut output[available..] {
             *sample = 0.0;
         }
+
+        available
     }
 
     fn len(&self) -> usize {
@@ -131,6 +131,7 @@ impl AudioPlayback {
         let is_playing = Arc::new(AtomicBool::new(true));
         let cancelled = Arc::new(AtomicBool::new(false));
         let prefill_done = Arc::new(AtomicBool::new(false));
+        let consumed_samples = Arc::new(AtomicI64::new(0));
 
         // Fill thread: 선행 디코딩 + 메인 루프
         let buffer_for_fill = Arc::clone(&buffer);
@@ -230,6 +231,7 @@ impl AudioPlayback {
         // cpal 출력 스트림 (선행 디코딩된 버퍼에서 즉시 재생)
         let buffer_for_stream = Arc::clone(&buffer);
         let is_playing_for_stream = Arc::clone(&is_playing);
+        let consumed_for_stream = Arc::clone(&consumed_samples);
 
         let stream = device.build_output_stream(
             &config,
@@ -241,14 +243,13 @@ impl AudioPlayback {
                     return;
                 }
 
-                // try_lock: 오디오 스레드는 절대 블로킹하면 안 됨
-                // fill_output: VecDeque에서 직접 복사 → 힙 할당 없음
                 match buffer_for_stream.try_lock() {
                     Ok(mut buf) => {
-                        buf.fill_output(data);
+                        let consumed = buf.fill_output(data);
+                        // 소비된 샘플 수 누적 (atomic, lock-free)
+                        consumed_for_stream.fetch_add(consumed as i64, Ordering::Relaxed);
                     }
                     Err(_) => {
-                        // lock 실패 시 무음 (fill thread가 push 중)
                         for sample in data.iter_mut() {
                             *sample = 0.0;
                         }
@@ -269,6 +270,8 @@ impl AudioPlayback {
             is_playing,
             cancelled,
             fill_thread: Some(fill_thread),
+            consumed_samples,
+            start_time_ms,
         })
     }
 
@@ -296,6 +299,15 @@ impl AudioPlayback {
     /// 재개
     pub fn resume(&self) {
         self.is_playing.store(true, Ordering::Relaxed);
+    }
+
+    /// 현재 오디오 재생 위치 (ms) — cpal이 스피커로 출력한 샘플 기준
+    pub fn get_position_ms(&self) -> i64 {
+        let samples = self.consumed_samples.load(Ordering::Relaxed);
+        // stereo: 2 샘플 = 1 프레임 → frames = samples / 2
+        let frames = samples / CHANNELS as i64;
+        let ms = frames * 1000 / SAMPLE_RATE as i64;
+        self.start_time_ms + ms
     }
 }
 

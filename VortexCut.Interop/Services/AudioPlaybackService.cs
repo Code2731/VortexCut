@@ -69,6 +69,16 @@ public class AudioPlaybackService : IAudioPlaybackService
         NativeMethods.audio_playback_resume(_handle);
     }
 
+    /// <summary>
+    /// 현재 오디오 재생 위치 (ms) — cpal이 출력한 샘플 기준
+    /// </summary>
+    public long GetPositionMs()
+    {
+        if (_handle == IntPtr.Zero) return -1;
+        var result = NativeMethods.audio_playback_get_position(_handle, out var positionMs);
+        return result == 0 ? positionMs : -1;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

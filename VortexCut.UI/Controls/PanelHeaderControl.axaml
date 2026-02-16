@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="32"
+             x:Class="VortexCut.UI.Controls.PanelHeaderControl"
+             x:Name="Root"
+             x:CompileBindings="False">
+
+    <Border Classes="PanelHeader">
+        <Grid ColumnDefinitions="Auto, *">
+            <!-- Title -->
+            <TextBlock Classes="PanelTitle"
+                       Text="{Binding #Root.Title}"
+                       VerticalAlignment="Center"/>
+
+            <!-- Additional Content (Optional) -->
+            <ContentPresenter Grid.Column="1"
+                              Content="{Binding #Root.AdditionalContent}"
+                              HorizontalAlignment="Stretch"/>
+        </Grid>
+    </Border>
+</UserControl>

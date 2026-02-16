@@ -199,6 +199,8 @@ impl Decoder {
             is_hardware,
             state: DecoderState::Ready,
             last_decoded_frame: None,
+            // [롤백] 스크럽 반응성을 위해 기본값은 낮게 유지 (100ms)
+            // 재생 시 프리즈 방지는 set_playback_mode()를 통해 동적으로 값을 올려야 함
             forward_threshold_ms: 100,
             eof_timestamp_ms: None,
             yuv_output,
@@ -319,6 +321,10 @@ impl Decoder {
 
         // Step 2: 패킷 읽으며 디코딩 (목표 PTS 도달까지)
         let mut hit_eof = false;
+        // [FIX] 목표 PTS에 도달하지 못하고 EOF가 발생할 경우를 대비해
+        // 탐색 과정에서 본 가장 마지막 프레임을 저장
+        let mut latest_seen_frame: Option<ffmpeg::frame::Video> = None;
+
         if decoded_frame.is_none() {
             let mut packet_count = 0;
             let mut packets_exhausted = true; // for 루프가 끝까지 소진되면 EOF
@@ -350,6 +356,9 @@ impl Decoder {
                         decoded_frame = Some(frame);
                         break;
                     }
+                    
+                    // 목표는 아니지만 유효한 프레임이므로 보관 (Proxy 불일치 대응)
+                    latest_seen_frame = Some(frame);
                 }
 
                 if decoded_frame.is_some() { packets_exhausted = false; break; }
@@ -375,6 +384,16 @@ impl Decoder {
             self.state = DecoderState::EndOfStream;
             // EOF 위치 기록 → 이후 같은/더 먼 timestamp에서 seek+전패킷읽기 반복 방지
             self.eof_timestamp_ms = Some(timestamp_ms);
+
+            // [FIX] 목표 프레임을 못 찾았지만 탐색 중 발견한 프레임이 있다면 그것을 반환
+            // (예: Proxy가 원본보다 짧을 때, Proxy의 끝 프레임을 보여줌)
+            if let Some(raw_frame) = latest_seen_frame {
+                if let Ok(frame) = self.convert_frame(&raw_frame, timestamp_ms) {
+                    self.last_decoded_frame = Some(frame.clone());
+                    return Ok(DecodeResult::EndOfStream(frame));
+                }
+            }
+
             return match &self.last_decoded_frame {
                 Some(f) => Ok(DecodeResult::EndOfStream(f.clone())),
                 None => Ok(DecodeResult::EndOfStreamEmpty),
@@ -585,16 +604,13 @@ impl Decoder {
 
     /// 특정 시간으로 seek (EOF/Error 상태에서 자동 복구)
     pub fn seek(&mut self, timestamp_ms: i64) -> Result<(), String> {
-        let stream = self.input_ctx.stream(self.video_stream_index)
-            .ok_or("Video stream not found")?;
+        // CRITICAL FIX: input_ctx.seek()는 내부적으로 avformat_seek_file(ctx, -1, ...)를 호출
+        // stream_index = -1 이면 FFmpeg은 타임스탬프를 AV_TIME_BASE (마이크로초) 단위로 해석
+        // 이전 코드는 stream time_base 단위로 변환 → seek 위치가 완전히 틀림
+        // (예: 60초를 0.92초로 seek → 59초 전체를 forward decode → 선형 성능 저하)
+        let timestamp_us = timestamp_ms * 1000; // ms → μs (AV_TIME_BASE)
 
-        let time_base = stream.time_base();
-
-        // milliseconds to stream time base
-        let timestamp = (timestamp_ms * i64::from(time_base.denominator()))
-            / (i64::from(time_base.numerator()) * 1000);
-
-        match self.input_ctx.seek(timestamp, ..timestamp) {
+        match self.input_ctx.seek(timestamp_us, ..timestamp_us) {
             Ok(_) => {
                 self.decoder.flush();
                 // seek 성공 → Ready 상태로 복구 (EOF/Error에서 복구)
@@ -605,7 +621,7 @@ impl Decoder {
             Err(e) => {
                 // seek 실패 → flush 후 재시도 1회
                 self.decoder.flush();
-                match self.input_ctx.seek(timestamp, ..timestamp) {
+                match self.input_ctx.seek(timestamp_us, ..timestamp_us) {
                     Ok(_) => {
                         self.decoder.flush();
                         self.state = DecoderState::Ready;

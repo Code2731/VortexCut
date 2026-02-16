@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="120" d:DesignHeight="28"
+             x:Class="VortexCut.UI.Controls.StatDisplayControl"
+             x:Name="Root"
+             x:CompileBindings="False">
+
+    <Border Background="{StaticResource BgDarkBrush}"
+            CornerRadius="3"
+            Padding="8,3">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="{Binding #Root.Label}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="11"
+                       VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding #Root.Value}"
+                       Foreground="{Binding #Root.ValueBrush, FallbackValue={StaticResource AccentBrush}}"
+                       FontWeight="SemiBold"
+                       FontSize="11"
+                       VerticalAlignment="Center"/>
+        </StackPanel>
+    </Border>
+</UserControl>

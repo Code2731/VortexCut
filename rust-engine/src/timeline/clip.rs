@@ -42,7 +42,10 @@ impl TransitionType {
 #[derive(Debug, Clone)]
 pub struct VideoClip {
     pub id: u64,
+    /// 원본 파일 경로 (Export, 오디오용)
     pub file_path: PathBuf,
+    /// 프리뷰용 Proxy 경로 (있으면 미리보기/스크럽 시 사용, Export는 원본)
+    pub proxy_path: Option<PathBuf>,
     pub start_time_ms: i64,    // 타임라인 상 시작 시간
     pub duration_ms: i64,       // 타임라인 상 지속 시간
     pub trim_start_ms: i64,     // 원본 파일에서 트림 시작
@@ -54,10 +57,17 @@ pub struct VideoClip {
 
 impl VideoClip {
     /// 새 비디오 클립 생성
-    pub fn new(id: u64, file_path: PathBuf, start_time_ms: i64, duration_ms: i64) -> Self {
+    pub fn new(
+        id: u64,
+        file_path: PathBuf,
+        start_time_ms: i64,
+        duration_ms: i64,
+        proxy_path: Option<PathBuf>,
+    ) -> Self {
         Self {
             id,
             file_path,
+            proxy_path,
             start_time_ms,
             duration_ms,
             trim_start_ms: 0,
@@ -139,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_video_clip_creation() {
-        let clip = VideoClip::new(1, PathBuf::from("test.mp4"), 0, 5000);
+        let clip = VideoClip::new(1, PathBuf::from("test.mp4"), 0, 5000, None);
         assert_eq!(clip.id, 1);
         assert_eq!(clip.start_time_ms, 0);
         assert_eq!(clip.duration_ms, 5000);
@@ -148,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_clip_contains_time() {
-        let clip = VideoClip::new(1, PathBuf::from("test.mp4"), 1000, 5000);
+        let clip = VideoClip::new(1, PathBuf::from("test.mp4"), 1000, 5000, None);
 
         assert!(!clip.contains_time(500));
         assert!(clip.contains_time(1000));
@@ -159,7 +169,7 @@ mod tests {
 
     #[test]
     fn test_timeline_to_source_time() {
-        let mut clip = VideoClip::new(1, PathBuf::from("test.mp4"), 2000, 3000);
+        let mut clip = VideoClip::new(1, PathBuf::from("test.mp4"), 2000, 3000, None);
         clip.trim_start_ms = 1000;
         clip.trim_end_ms = 4000;
 

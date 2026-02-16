@@ -1,8 +1,8 @@
 # VortexCut 기술 명세서 (Technical Specification)
 
-> **작성일**: 2026-02-16
-> **버전**: 0.13.0 (코드 모듈화 리팩토링)
-> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절, 워크스페이스 전환
+> **작성일**: 2026-02-17
+> **버전**: 0.15.0 (FFmpeg Seek 수정 + Proxy + 디버그 로그 매크로)
+> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절, 워크스페이스 전환, Proxy 프리뷰
 
 ## 1. 개요
 
@@ -666,7 +666,8 @@ DecodeResult: Frame | FrameSkipped | EndOfStream | EndOfStreamEmpty
 
 ```bash
 cd rust-engine
-cargo build --release
+cargo build --release                        # 릴리스 (로그 없음)
+cargo build --release --features debug_log   # 릴리스 + 디버그 로그
 ```
 
 출력: `target/release/rust_engine.dll` (Windows) 또는 `librust_engine.dylib` (macOS)
@@ -677,14 +678,18 @@ cargo build --release
 dotnet build VortexCut.sln -c Release
 ```
 
-### 7.3 통합 빌드
+### 7.3 통합 빌드 (권장)
 
-**Windows** ([scripts/build-rust.ps1](scripts/build-rust.ps1)):
-```powershell
-cargo build --release
-Copy-Item target\release\rust_engine.dll VortexCut.UI\runtimes\win-x64\native\
-dotnet build VortexCut.sln -c Release
+**Windows** ([build-and-copy-dll.bat](build-and-copy-dll.bat)):
+```batch
+build-and-copy-dll.bat              # release, 로그 없음
+build-and-copy-dll.bat log          # release + debug_log 활성화
+build-and-copy-dll.bat debug        # debug 빌드
+build-and-copy-dll.bat debug log    # debug + debug_log
 ```
+
+**중요**: .NET은 `runtimes/win-x64/native/rust_engine.dll`을 bin root보다 우선 로드.
+`build-and-copy-dll.bat`이 3곳에 자동 복사하여 불일치 방지.
 
 **macOS** ([scripts/build-rust.sh](scripts/build-rust.sh)):
 ```bash
@@ -1261,7 +1266,51 @@ if (width * height * 4 > MAX_FRAME_SIZE) {
 | I (재생 중) | 다이나믹 트림 In |
 | O (재생 중) | 다이나믹 트림 Out |
 
-## 15. 참고 자료
+## 15. Phase 15: FFmpeg Seek 수정 + Proxy 프리뷰 + 디버그 로그 시스템 (완료 ✅ 2026-02-17)
+
+### 15.1 FFmpeg Seek AV_TIME_BASE 버그 수정 (Critical)
+- **증상**: 타임라인 1분 이후 스크럽 시 디코드 시간이 선형 증가 (60초=897ms, 120초=1356ms)
+- **근본 원인**: `input_ctx.seek()` → `avformat_seek_file(ctx, -1, ...)` 호출 시 stream_index=-1이면 타임스탬프를 AV_TIME_BASE(마이크로초) 단위로 해석하는데, stream time_base 단위로 변환하고 있었음
+- **수정**: `let timestamp_us = timestamp_ms * 1000;` (ms → μs) — decoder.rs:611
+- **결과**: 3분 31초 위치에서 decode 17ms (수정 전 1330ms+)
+
+### 15.2 Proxy 파일 프리뷰 시스템
+- `video_path_for_decode()` — Export 시 원본, 프리뷰/스크럽 시 proxy 자동 선택
+- Proxy 경로: `clip.proxy_path` (VideoClip 필드 추가)
+- ProxyService: FFmpeg `-g 30 -keyint_min 30` (1초 키프레임)
+- Rust VideoClip/AudioClip에 `proxy_path: Option<PathBuf>` 필드
+- FFI: `timeline_set_clip_proxy_path()` — C# → Rust proxy 경로 동기화
+
+### 15.3 DLL 배포 3중 복사
+- **.NET RID 우선 로드**: `runtimes/win-x64/native/rust_engine.dll` > bin root
+- 구버전 DLL이 runtimes에 남아있으면 신규 수정이 적용되지 않는 치명적 배포 버그 발견/해결
+- `build-and-copy-dll.bat`이 3곳에 자동 복사:
+  1. `bin/Debug/net8.0/rust_engine.dll`
+  2. `bin/Debug/net8.0/runtimes/win-x64/native/rust_engine.dll`
+  3. `VortexCut.UI/runtimes/win-x64/native/rust_engine.dll`
+
+### 15.4 debug_log! 조건부 컴파일 매크로
+- `Cargo.toml`: `[features] debug_log = []`
+- `lib.rs`: `debug_log!` 매크로 — `#[cfg(feature = "debug_log")]`로 조건 컴파일
+- 평소 빌드: 로그 완전 제거 (0 bytes stderr)
+- 디버깅 빌드: `cargo build --release --features debug_log` 또는 `build-and-copy-dll.bat log`
+- renderer.rs 핫패스 `[RENDER]`/`[DECODER]` 로그 → `debug_log!`로 교체
+
+### 15.5 빌드 스크립트 개선
+```batch
+build-and-copy-dll.bat              # release, 로그 없음
+build-and-copy-dll.bat log          # release + debug_log 활성화
+build-and-copy-dll.bat debug        # debug 빌드
+build-and-copy-dll.bat debug log    # debug + debug_log
+```
+
+### 15.6 Inspector UI 리디자인
+- PanelHeaderControl (재사용 가능한 패널 헤더)
+- PropertyEditorControl (프로퍼티 편집 컨트롤)
+- StatDisplayControl (상태 표시 컨트롤)
+- PreviewSettings 서비스 추가
+
+## 16. 참고 자료
 
 ### 공식 문서
 - [Rust FFI Omnibus](http://jakegoulding.com/rust-ffi-omnibus/)
@@ -1282,6 +1331,6 @@ if (width * height * 4 > MAX_FRAME_SIZE) {
 
 ---
 
-**마지막 업데이트**: 2026-02-16 (Phase 14 완료: Advanced Video Editing UX)
+**마지막 업데이트**: 2026-02-17 (Phase 15 완료: FFmpeg Seek 수정 + Proxy + 디버그 로그 매크로)
 **작성자**: Claude Sonnet 4.5 / Claude Opus 4.6
-**Phase 14 내용**: 트림 스냅/핸들/프리뷰, 고스트 아웃라인, 호버 썸네일, 3-Point 편집, 다이나믹 트리밍, Swifter 스크럽 그리드
+**Phase 15 내용**: FFmpeg seek AV_TIME_BASE 버그 수정, Proxy 프리뷰, DLL 3중 배포, debug_log! 조건부 컴파일, build-and-copy-dll.bat 개선

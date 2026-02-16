@@ -87,6 +87,21 @@ pub extern "C" fn audio_playback_resume(handle: *mut c_void) -> i32 {
     ErrorCode::Success as i32
 }
 
+/// 오디오 현재 재생 위치 조회 (ms) — cpal 소비 샘플 기준
+#[no_mangle]
+pub extern "C" fn audio_playback_get_position(handle: *mut c_void, out_position_ms: *mut i64) -> i32 {
+    if handle.is_null() || out_position_ms.is_null() {
+        return ErrorCode::NullPointer as i32;
+    }
+
+    unsafe {
+        let playback = &*(handle as *const AudioPlayback);
+        *out_position_ms = playback.get_position_ms();
+    }
+
+    ErrorCode::Success as i32
+}
+
 /// 오디오 재생 객체 파괴 (메모리 해제)
 #[no_mangle]
 pub extern "C" fn audio_playback_destroy(handle: *mut c_void) -> i32 {

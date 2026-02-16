@@ -200,7 +200,7 @@ public class ProjectSerializationService
             }
             else
             {
-                clipId = timelineService.AddVideoClip(trackId, clipDto.FilePath, clipDto.StartTimeMs, clipDto.DurationMs);
+                clipId = timelineService.AddVideoClip(trackId, clipDto.FilePath, clipDto.StartTimeMs, clipDto.DurationMs, clipDto.ProxyFilePath);
             }
 
             var clipModel = DtoToClip(clipDto, clipId);

@@ -96,11 +96,11 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
-    private void PlayPause()
+    private async Task PlayPause()
     {
         try
         {
-            Preview.TogglePlayback();
+            await Preview.TogglePlayback();
             Timeline.IsPlaying = Preview.IsPlaying; // UI 상태 동기화
         }
         catch (Exception ex)

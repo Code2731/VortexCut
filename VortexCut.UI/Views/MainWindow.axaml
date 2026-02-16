@@ -58,6 +58,12 @@
                         <MenuItem Header="Zoom Out" InputGesture="Ctrl+Subtract"/>
                         <MenuItem Header="Fit to Window" InputGesture="Ctrl+D0"/>
                         <Separator/>
+                        <MenuItem Header="Preview Quality">
+                            <MenuItem Header="5 fps (저사양)" Command="{Binding SetPreviewFpsCommand}" CommandParameter="5"/>
+                            <MenuItem Header="10 fps (기본)" Command="{Binding SetPreviewFpsCommand}" CommandParameter="10"/>
+                            <MenuItem Header="30 fps (고품질)" Command="{Binding SetPreviewFpsCommand}" CommandParameter="30"/>
+                        </MenuItem>
+                        <Separator/>
                         <MenuItem Header="Show Timeline" InputGesture="T"/>
                         <MenuItem Header="Show Inspector" InputGesture="I"/>
                     </MenuItem>
@@ -116,9 +122,7 @@
 
                 <!-- 1. Project Bin -->
                 <Grid Grid.Column="0" RowDefinitions="Auto, *">
-                    <Border Classes="PanelHeader">
-                        <TextBlock Classes="PanelTitle" Text="PROJECT BIN"/>
-                    </Border>
+                    <controls:PanelHeaderControl Title="PROJECT BIN"/>
                     <views:ProjectBinView Grid.Row="1" DataContext="{Binding ProjectBin}" Background="{StaticResource BgPanelBrush}"/>
                 </Grid>
                 <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{StaticResource BgBaseBrush}"/>

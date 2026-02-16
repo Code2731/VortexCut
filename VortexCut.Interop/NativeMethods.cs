@@ -62,12 +62,14 @@ public static class NativeMethods
 
     /// <summary>
     /// 비디오 클립 추가
+    /// filePath: 원본 경로, proxyPath: 프리뷰용 Proxy (IntPtr.Zero면 원본만 사용)
     /// </summary>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int timeline_add_video_clip(
         IntPtr timeline,
         ulong trackId,
         IntPtr filePath,
+        IntPtr proxyPath,
         long startTimeMs,
         long durationMs,
         out ulong outClipId);
@@ -355,6 +357,12 @@ public static class NativeMethods
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int audio_playback_destroy(IntPtr handle);
 
+    /// <summary>
+    /// 오디오 현재 재생 위치 조회 (ms) — cpal 소비 샘플 기준
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int audio_playback_get_position(IntPtr handle, out long outPositionMs);
+
     // ==================== Export Functions ====================
 
     /// <summary>
@@ -470,4 +478,50 @@ public static class NativeMethods
     /// </summary>
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int exporter_free_subtitle_list(IntPtr list);
+
+    // ============================================================
+    // PlaybackEngine FFI (재생 전용 백그라운드 프리페치)
+    // ============================================================
+
+    /// <summary>
+    /// PlaybackEngine 생성
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int playback_engine_create(
+        IntPtr timeline,
+        out IntPtr outEngine);
+
+    /// <summary>
+    /// PlaybackEngine 시작 (백그라운드 프리페치 시작)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int playback_engine_start(
+        IntPtr engine,
+        long startMs);
+
+    /// <summary>
+    /// PlaybackEngine 정지 (백그라운드 스레드 종료)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int playback_engine_stop(IntPtr engine);
+
+    /// <summary>
+    /// timestamp에 가장 가까운 프레임 조회 (디코딩 없음, 즉시 반환)
+    /// outActualTimestampMs: 큐에서 실제 매칭된 프레임 timestamp (진단용)
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int playback_engine_try_get_frame(
+        IntPtr engine,
+        long timestampMs,
+        out uint outWidth,
+        out uint outHeight,
+        out IntPtr outDataPtr,
+        out nuint outDataSize,
+        out long outActualTimestampMs);
+
+    /// <summary>
+    /// PlaybackEngine 파괴
+    /// </summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int playback_engine_destroy(IntPtr engine);
 }

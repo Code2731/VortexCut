@@ -263,9 +263,25 @@ impl Renderer {
         }
     }
 
+    /// 프리뷰 시 proxy, Export 시 원본 경로 반환
+    fn video_path_for_decode(&self, clip: &VideoClip) -> std::path::PathBuf {
+        // Export 모드: 항상 원본 (최종 품질 보장)
+        if self.export_resolution.is_some() {
+            return clip.file_path.clone();
+        }
+        // 프리뷰/스크럽: proxy 있으면 proxy 사용
+        if let Some(ref proxy) = clip.proxy_path {
+            if proxy.exists() {
+                return proxy.clone();
+            }
+        }
+        clip.file_path.clone()
+    }
+
     /// 단일 클립 디코딩 + 이펙트 적용 (RGBA 반환, 트랜지션 블렌딩 전처리용)
     fn decode_and_render_clip(&mut self, clip: &VideoClip, source_time_ms: i64, timestamp_ms: i64) -> Option<RenderedFrame> {
-        let file_path = clip.file_path.to_string_lossy().to_string();
+        let decode_path = self.video_path_for_decode(clip);
+        let file_path = decode_path.to_string_lossy().to_string();
 
         // 캐시 조회
         if let Some(frame) = self.frame_cache.get(&file_path, source_time_ms).cloned() {
@@ -430,7 +446,8 @@ impl Renderer {
         }
 
         let (clip, source_time_ms) = &clips_to_render[0];
-        let file_path = clip.file_path.to_string_lossy().to_string();
+        let decode_path = self.video_path_for_decode(clip);
+        let file_path = decode_path.to_string_lossy().to_string();
 
         // 1단계: 캐시 조회 (.cloned()로 즉시 소유권 획득 → 가변 참조 해제)
         if let Some(mut frame) = self.frame_cache.get(&file_path, *source_time_ms).cloned() {
@@ -447,7 +464,7 @@ impl Renderer {
 
         // 처음 10프레임 또는 50ms 이상 걸린 경우 로그
         if self.diag_total <= 10 || decode_elapsed > 50 {
-            eprintln!(
+            debug_log!(
                 "[RENDER] t={}ms src={}ms decode={}ms total_frames={}",
                 timestamp_ms, source_time_ms, decode_elapsed, self.diag_total
             );
@@ -541,7 +558,7 @@ impl Renderer {
     /// 진단 통계 출력 (30프레임=~1초마다)
     fn print_diag_if_needed(&self, last_ts: i64) {
         if self.diag_total % 30 == 0 {
-            eprintln!(
+            debug_log!(
                 "[RENDER DIAG] t={}ms | total={} cache={} decode={} trans={} trans_skip={} eof={} skip={} noclip={} err={} last={}ms",
                 last_ts,
                 self.diag_total,
@@ -561,12 +578,13 @@ impl Renderer {
     /// 클립의 프레임 디코딩 (DecodeResult 반환)
     /// 에러 시 디코더 재생성 1회 재시도 (corrupted state 복구)
     fn decode_clip_frame(&mut self, clip: &VideoClip, source_time_ms: i64) -> Result<DecodeResult, String> {
-        let file_path = clip.file_path.to_string_lossy().to_string();
+        let decode_path = self.video_path_for_decode(clip);
+        let file_path = decode_path.to_string_lossy().to_string();
 
         // Error 상태 디코더는 제거 후 재생성 (복구 불가능 상태 탈출)
         if let Some(decoder) = self.decoder_cache.get(&file_path) {
             if decoder.state() == crate::ffmpeg::DecoderState::Error {
-                eprintln!("[DECODER] Error state, recreating: {}", file_path);
+                debug_log!("[DECODER] Error state, recreating: {}", file_path);
                 self.decoder_cache.remove(&file_path);
             }
         }
@@ -574,10 +592,10 @@ impl Renderer {
         // 디코더가 캐시에 없으면 생성 (현재 모드의 forward_threshold 적용)
         let threshold = if self.playback_mode { 5000 } else { 100 };
         if !self.decoder_cache.contains_key(&file_path) {
-            // Export: LANCZOS 고품질, 프리뷰: FAST_BILINEAR
+            // Export: LANCZOS 고품질 (원본), 프리뷰: FAST_BILINEAR (proxy 또는 원본)
             let mut decoder = match self.export_resolution {
-                Some((w, h)) => Decoder::open_for_export(&clip.file_path, w, h)?,
-                None => Decoder::open(&clip.file_path)?,
+                Some((w, h)) => Decoder::open_for_export(&decode_path, w, h)?,
+                None => Decoder::open(&decode_path)?,
             };
             decoder.set_forward_threshold(threshold);
             self.decoder_cache.insert(file_path.clone(), decoder);
@@ -589,13 +607,13 @@ impl Renderer {
         match decoder.decode_frame(source_time_ms) {
             Ok(result) => Ok(result),
             Err(e) => {
-                eprintln!("[DECODER] Decode error at {}ms: {}, recreating decoder", source_time_ms, e);
+                debug_log!("[DECODER] Decode error at {}ms: {}, recreating decoder", source_time_ms, e);
                 self.decoder_cache.remove(&file_path);
 
                 let mut new_decoder = match self.export_resolution {
-                    Some((w, h)) => Decoder::open_for_export(&clip.file_path, w, h)
+                    Some((w, h)) => Decoder::open_for_export(&decode_path, w, h)
                         .map_err(|e2| format!("Decoder recreate failed: {}", e2))?,
-                    None => Decoder::open(&clip.file_path)
+                    None => Decoder::open(&decode_path)
                         .map_err(|e2| format!("Decoder recreate failed: {}", e2))?,
                 };
                 new_decoder.set_forward_threshold(threshold);

@@ -62,6 +62,22 @@ public partial class MainViewModel : ViewModelBase
         ActiveWorkspace = workspace;
     }
 
+    /// <summary>
+    /// 미리보기 품질 설정 (5/10/30fps) - 프레임 스킵 / 저사양 모드
+    /// </summary>
+    [RelayCommand]
+    private void SetPreviewFps(string fpsStr)
+    {
+        if (double.TryParse(fpsStr, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var fps))
+            PreviewSettings.SetPreviewFps(fps);
+    }
+
+    /// <summary>
+    /// 현재 미리보기 FPS (UI 체크 표시용)
+    /// </summary>
+    public double PreviewFps => PreviewSettings.PreviewFps;
+
     public MainViewModel(ProjectService projectService, ProjectSerializationService serializationService, IAudioPlaybackService audioPlayback)
     {
         _projectService = projectService;
@@ -76,15 +92,23 @@ public partial class MainViewModel : ViewModelBase
         // Preview와 Timeline 연결
         _preview.SetTimelineViewModel(_timeline);
 
+        // Preview FPS 변경 시 UI 갱신 (메뉴 체크 표시용)
+        PreviewSettings.PreviewFpsChanged += () =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                OnPropertyChanged(nameof(PreviewFps)));
+
         // 타임라인에서 재생 중지 요청 시 처리 (무조건 중지)
-        _timeline.RequestStopPlayback = () =>
+        _timeline.RequestStopPlayback = async () =>
         {
             if (_preview.IsPlaying)
             {
-                _preview.TogglePlayback();
+                await _preview.TogglePlayback();
             }
             _timeline.IsPlaying = false;
         };
+
+        // 타임라인 스크럽 → 프리뷰 렌더 연결
+        _timeline.OnScrubRequested = ts => _preview.RenderFrameAsync(ts);
     }
 
     /// <summary>

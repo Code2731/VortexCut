@@ -106,7 +106,7 @@ public class DeleteClipAction : IUndoableAction
     public void Undo()
     {
         // Rust FFI 재추가 → 새 clipId 발급
-        var newClipId = _projectService.ReAddVideoClip(_filePath, _startTimeMs, _durationMs);
+        var newClipId = _projectService.ReAddVideoClip(_filePath, _startTimeMs, _durationMs, _proxyFilePath);
 
         // 스냅샷에서 복원
         _clip.Id = newClipId;

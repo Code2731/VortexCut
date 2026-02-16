@@ -591,13 +591,16 @@ public class TimelineHeader : Control
         if (clickedMarker != null)
         {
             _viewModel.CurrentTimeMs = clickedMarker.TimeMs;
+            _viewModel.OnScrubRequested?.Invoke(clickedMarker.TimeMs);
             e.Handled = true;
         }
         else
         {
             // Playhead 이동 (드래그 시작)
             long timeMs = XToTime(point.X);
-            _viewModel.CurrentTimeMs = ClampTimeToContent(Math.Max(0, timeMs));
+            var clampedTime = ClampTimeToContent(Math.Max(0, timeMs));
+            _viewModel.CurrentTimeMs = clampedTime;
+            _viewModel.OnScrubRequested?.Invoke(clampedTime);
             _isDraggingPlayhead = true;
             e.Handled = true;
         }
@@ -619,7 +622,9 @@ public class TimelineHeader : Control
         if (_isDraggingPlayhead && _viewModel != null)
         {
             long timeMs = XToTime(point.X);
-            _viewModel.CurrentTimeMs = ClampTimeToContent(Math.Max(0, timeMs));
+            var clampedTime = ClampTimeToContent(Math.Max(0, timeMs));
+            _viewModel.CurrentTimeMs = clampedTime;
+            _viewModel.OnScrubRequested?.Invoke(clampedTime);
         }
 
         // 마커 호버

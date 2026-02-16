@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="clr-namespace:VortexCut.UI.Controls"
+             mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="80"
+             x:Class="VortexCut.UI.Controls.PropertyEditorControl"
+             x:Name="Root"
+             x:CompileBindings="False">
+
+    <StackPanel Spacing="4">
+        <!-- Label + Value -->
+        <Grid ColumnDefinitions="*, Auto">
+            <TextBlock Text="{Binding #Root.Label}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="11"
+                       VerticalAlignment="Center"/>
+            <controls:EditableValueText Grid.Column="1"
+                                        x:Name="ValueText"
+                                        DisplayValue="{Binding #Root.DisplayValue}"/>
+        </Grid>
+
+        <!-- Slider -->
+        <Slider x:Name="PropertySlider"
+                Minimum="{Binding #Root.Minimum}"
+                Maximum="{Binding #Root.Maximum}"
+                Value="{Binding #Root.Value, Mode=TwoWay}"
+                SmallChange="{Binding #Root.SmallChange}"
+                LargeChange="{Binding #Root.LargeChange}"/>
+    </StackPanel>
+</UserControl>

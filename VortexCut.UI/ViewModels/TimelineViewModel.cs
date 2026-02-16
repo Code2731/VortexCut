@@ -186,7 +186,13 @@ public partial class TimelineViewModel : ViewModelBase
     /// <summary>
     /// 재생 중지 요청 콜백 (MainViewModel에서 설정)
     /// </summary>
-    public Action? RequestStopPlayback { get; set; }
+    public Func<Task>? RequestStopPlayback { get; set; }
+
+    /// <summary>
+    /// 스크럽 요청 콜백: 타임라인 클릭/드래그 시 프리뷰 프레임 렌더 요청
+    /// MainViewModel에서 PreviewViewModel.RenderFrameAsync에 연결
+    /// </summary>
+    public Action<long>? OnScrubRequested { get; set; }
 
     public TimelineViewModel(IProjectService projectService)
     {

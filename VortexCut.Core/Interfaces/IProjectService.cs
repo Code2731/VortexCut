@@ -40,7 +40,7 @@ public interface IProjectService : IDisposable
     /// <summary>
     /// 비디오 클립 재추가 (Redo/Undo용)
     /// </summary>
-    ulong ReAddVideoClip(string filePath, long startTimeMs, long durationMs);
+    ulong ReAddVideoClip(string filePath, long startTimeMs, long durationMs, string? proxyFilePath = null);
 
     /// <summary>
     /// 클립을 Rust Timeline에 동기화 (remove + re-add)
@@ -91,6 +91,23 @@ public interface IProjectService : IDisposable
     /// 재생 모드 전환 (재생 시작 시 true, 정지 시 false)
     /// </summary>
     void SetPlaybackMode(bool playback);
+
+    // === PlaybackEngine (재생 전용 백그라운드 프리페치) ===
+
+    /// <summary>
+    /// PlaybackEngine 시작 (백그라운드 프리페치 시작)
+    /// </summary>
+    void StartPlaybackEngine(long startMs);
+
+    /// <summary>
+    /// PlaybackEngine 정지 (백그라운드 스레드 종료)
+    /// </summary>
+    void StopPlaybackEngine();
+
+    /// <summary>
+    /// PlaybackEngine에서 프레임 조회 (디코딩 없음, 즉시 반환)
+    /// </summary>
+    IRenderedFrame? TryGetPlaybackFrame(long timestampMs);
 
     // === 렌더링 ===
 

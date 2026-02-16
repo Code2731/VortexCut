@@ -58,13 +58,14 @@ impl Timeline {
         file_path: std::path::PathBuf,
         start_time_ms: i64,
         duration_ms: i64,
+        proxy_path: Option<std::path::PathBuf>,
     ) -> Option<u64> {
         let track = self.video_tracks.iter_mut().find(|t| t.id == track_id)?;
 
         let clip_id = self.next_clip_id;
         self.next_clip_id += 1;
 
-        let clip = VideoClip::new(clip_id, file_path, start_time_ms, duration_ms);
+        let clip = VideoClip::new(clip_id, file_path, start_time_ms, duration_ms, proxy_path);
         track.add_clip(clip);
 
         Some(clip_id)
@@ -231,6 +232,7 @@ mod tests {
             PathBuf::from("test.mp4"),
             0,
             5000,
+            None,
         );
 
         assert!(clip_id.is_some());
@@ -247,6 +249,7 @@ mod tests {
             PathBuf::from("test.mp4"),
             0,
             5000,
+            None,
         ).unwrap();
 
         assert_eq!(timeline.video_tracks[0].clips.len(), 1);
@@ -263,8 +266,8 @@ mod tests {
         let video_track = timeline.add_video_track();
         let audio_track = timeline.add_audio_track();
 
-        timeline.add_video_clip(video_track, PathBuf::from("v1.mp4"), 0, 5000);
-        timeline.add_video_clip(video_track, PathBuf::from("v2.mp4"), 5000, 3000);
+        timeline.add_video_clip(video_track, PathBuf::from("v1.mp4"), 0, 5000, None);
+        timeline.add_video_clip(video_track, PathBuf::from("v2.mp4"), 5000, 3000, None);
         timeline.add_audio_clip(audio_track, PathBuf::from("a1.mp3"), 0, 10000);
 
         assert_eq!(timeline.duration_ms(), 10000);
@@ -277,8 +280,8 @@ mod tests {
         let track1 = timeline.add_video_track();
         let track2 = timeline.add_video_track();
 
-        timeline.add_video_clip(track1, PathBuf::from("v1.mp4"), 0, 5000);
-        timeline.add_video_clip(track2, PathBuf::from("v2.mp4"), 2000, 3000);
+        timeline.add_video_clip(track1, PathBuf::from("v1.mp4"), 0, 5000, None);
+        timeline.add_video_clip(track2, PathBuf::from("v2.mp4"), 2000, 3000, None);
 
         let clips_at_3000 = timeline.get_video_clips_at_time(3000);
         assert_eq!(clips_at_3000.len(), 2);

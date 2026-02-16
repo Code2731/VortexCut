@@ -102,19 +102,24 @@ public class TimelineService : IDisposable
 
     /// <summary>
     /// 비디오 클립 추가
+    /// proxyFilePath: 프리뷰용 Proxy 경로 (null이면 원본만 사용)
     /// </summary>
-    public ulong AddVideoClip(ulong trackId, string filePath, long startTimeMs, long durationMs)
+    public ulong AddVideoClip(ulong trackId, string filePath, long startTimeMs, long durationMs, string? proxyFilePath = null)
     {
         ThrowIfDisposed();
         ThrowIfNoTimeline();
 
         IntPtr filePathPtr = Marshal.StringToCoTaskMemUTF8(filePath);
+        IntPtr proxyPathPtr = string.IsNullOrEmpty(proxyFilePath)
+            ? IntPtr.Zero
+            : Marshal.StringToCoTaskMemUTF8(proxyFilePath);
         try
         {
             int result = NativeMethods.timeline_add_video_clip(
                 _timeline!.DangerousGetHandle(),
                 trackId,
                 filePathPtr,
+                proxyPathPtr,
                 startTimeMs,
                 durationMs,
                 out ulong clipId);
@@ -125,6 +130,8 @@ public class TimelineService : IDisposable
         finally
         {
             Marshal.FreeCoTaskMem(filePathPtr);
+            if (proxyPathPtr != IntPtr.Zero)
+                Marshal.FreeCoTaskMem(proxyPathPtr);
         }
     }
 

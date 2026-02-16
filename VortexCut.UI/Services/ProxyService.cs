@@ -33,7 +33,8 @@ public class ProxyService
 
             // ffmpeg 호출: 해상도 1/2, 적당한 비트레이트로 H.264 인코딩
             // 예: ffmpeg -y -i input -vf scale=iw/2:ih/2 -c:v libx264 -preset veryfast -crf 23 -c:a copy proxy.mp4
-            var args = $"-y -i \"{sourcePath}\" -vf scale=iw/2:ih/2 -c:v libx264 -preset veryfast -crf 23 -c:a copy \"{proxyPath}\"";
+            // -g 30 -keyint_min 30: 1초(30fps)마다 키프레임 강제 → 스크럽 seek 속도 대폭 개선
+            var args = $"-y -i \"{sourcePath}\" -vf scale=iw/2:ih/2 -c:v libx264 -preset veryfast -crf 23 -g 30 -keyint_min 30 -c:a copy \"{proxyPath}\"";
 
             var startInfo = new ProcessStartInfo
             {

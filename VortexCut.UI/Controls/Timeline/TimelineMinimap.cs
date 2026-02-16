@@ -159,7 +159,9 @@ public class TimelineMinimap : Control
             .DefaultIfEmpty(0)
             .Max();
 
-        _viewModel.CurrentTimeMs = Math.Clamp(timeMs, 0, maxTime);
+        var clampedTime = Math.Clamp(timeMs, 0, maxTime);
+        _viewModel.CurrentTimeMs = clampedTime;
+        _viewModel.OnScrubRequested?.Invoke(clampedTime);
 
         e.Handled = true;
         InvalidateVisual();
@@ -183,7 +185,9 @@ public class TimelineMinimap : Control
                 .DefaultIfEmpty(0)
                 .Max();
 
-            _viewModel.CurrentTimeMs = Math.Clamp(timeMs, 0, maxTime);
+            var clampedTime = Math.Clamp(timeMs, 0, maxTime);
+            _viewModel.CurrentTimeMs = clampedTime;
+            _viewModel.OnScrubRequested?.Invoke(clampedTime);
 
             e.Handled = true;
             InvalidateVisual();
