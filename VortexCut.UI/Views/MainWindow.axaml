@@ -45,8 +45,8 @@
                         <MenuItem Header="Exit" InputGesture="Alt+F4"/>
                     </MenuItem>
                     <MenuItem Header="Edit">
-                        <MenuItem Header="Undo" InputGesture="Ctrl+Z"/>
-                        <MenuItem Header="Redo" InputGesture="Ctrl+Y"/>
+                        <MenuItem Header="실행 취소" Command="{Binding Timeline.UndoCommand}" InputGesture="Ctrl+Z"/>
+                        <MenuItem Header="다시 실행" Command="{Binding Timeline.RedoCommand}" InputGesture="Ctrl+Y"/>
                         <Separator/>
                         <MenuItem Header="Cut" InputGesture="Ctrl+X"/>
                         <MenuItem Header="Copy" InputGesture="Ctrl+C"/>

@@ -1,3 +1,4 @@
+using System.Linq;
 using VortexCut.Core.Interfaces;
 
 namespace VortexCut.UI.Services;
@@ -23,6 +24,18 @@ public class UndoRedoService
 
     public string? UndoDescription => _undoStack.Count > 0 ? _undoStack.Peek().Description : null;
     public string? RedoDescription => _redoStack.Count > 0 ? _redoStack.Peek().Description : null;
+
+    /// <summary>
+    /// Undo 스택 목록 반환 (Stack.ToArray = [최신, ..., 오래된] 순)
+    /// </summary>
+    public IReadOnlyList<string> GetUndoItems() =>
+        _undoStack.Select(a => a.Description).ToList();
+
+    /// <summary>
+    /// Redo 스택 목록 반환 (Stack.ToArray = [다음Redo, ..., 마지막Redo] 순)
+    /// </summary>
+    public IReadOnlyList<string> GetRedoItems() =>
+        _redoStack.Select(a => a.Description).ToList();
 
     /// <summary>
     /// 액션 실행 + 히스토리 기록
@@ -78,6 +91,7 @@ public class UndoRedoService
     {
         _undoStack.Clear();
         _redoStack.Clear();
+        OnHistoryChanged?.Invoke();
     }
 
     private void PushUndo(IUndoableAction action)

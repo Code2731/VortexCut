@@ -1,8 +1,8 @@
 # VortexCut 기술 명세서 (Technical Specification)
 
 > **작성일**: 2026-02-17
-> **버전**: 0.15.0 (FFmpeg Seek 수정 + Proxy + 디버그 로그 매크로)
-> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절, 워크스페이스 전환, Proxy 프리뷰
+> **버전**: 0.16.0 (트랜지션 UI 시스템 + 플레이헤드 버그 수정)
+> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절, 워크스페이스 전환, Proxy 프리뷰, 트랜지션 UI
 
 ## 1. 개요
 
@@ -764,6 +764,57 @@ dotnet build VortexCut.sln -c Release
 - [ ] Undo/Redo
 - [x] 프로젝트 저장/불러오기 (JSON 직렬화) — ProjectSerializer
 
+### Phase 16: 트랜지션 UI 시스템 + 플레이헤드 버그 수정 (완료 ✅ 2026-02-17)
+
+- [x] TransitionType enum (None/Crossfade/FadeBlack/WipeLeft/WipeRight/WipeUp/WipeDown)
+- [x] DrawTransitionZones() — 겹치는 클립 쌍 시각화 (녹색 대각선 줄무늬 + 타입 라벨)
+- [x] 드래그 완료 시 자동 Crossfade 적용 (CheckAndApplyOverlapTransition)
+- [x] 오디오 크로스페이드 동기화 (링크된 오디오 클립 FadeIn/Out 자동 설정)
+- [x] 우클릭 컨텍스트 메뉴 — 7가지 트랜지션 타입 선택
+- [x] SetTransitionAction — Undo/Redo 스택 기록 + 렌더 캐시 클리어
+- [x] Inspector Effects 탭 — TransitionType ComboBox + Reset 버튼
+- [x] TimelineHeader 플레이헤드 갱신 버그 수정 (PropertyChanged 구독 누락)
+- [x] PreviewViewModel 타임라인 쓰로틀 리셋 버그 수정 (`_lastTimelineUpdateMs = 0`)
+
+### Phase 17: Undo/Redo 전체 시스템 (완료 ✅ 2026-02-17)
+
+- [x] IUndoableAction 인터페이스 + UndoRedoService (최대 100스텝, Stack 기반)
+- [x] TimelineViewModel 내부 생성 (new UndoRedoService) — DI 불필요
+- [x] Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z 단축키 (MainWindow.axaml.cs KeyDown)
+- [x] 메뉴바 "실행 취소" / "다시 실행" Command 바인딩 + CanExecute 활성화 상태
+  - [x] `[RelayCommand(CanExecute = nameof(CanUndoAction))]` — IsEditing && CanUndo
+  - [x] `OnHistoryChanged` → `UndoCommand.NotifyCanExecuteChanged()` 호출
+- [x] 기존 IUndoableAction 구현체 전체 연결
+  - [x] MoveClipAction, TrimClipAction, RazorSplitAction, RippleDeleteAction
+  - [x] SetTransitionAction, SetClipEffectsAction
+  - [x] AddClipAction, DeleteClipAction
+  - [x] AddTrackAction, RemoveTrackAction
+  - [x] AddMarkerAction, RemoveMarkerAction
+  - [x] AddKeyframeAction, RemoveKeyframeAction, MoveKeyframeAction
+  - [x] AddSubtitleClipAction, DeleteSubtitleClipAction, EditSubtitleTextAction
+- [x] CompositeAction — 여러 액션을 하나의 Undo 단계로 묶기 (SRT 임포트, 다중 삭제 등)
+- [x] Undo/Redo 히스토리 패널 (Inspector 우측 패널 내 HISTORY 탭)
+  - [x] Inspector 헤더에 [PROPS] / [HISTORY] 탭 토글 버튼
+  - [x] 히스토리 목록: 오래된 액션(상단) → 최신 실행 액션(▶ 현재) → Redo 항목(회색)
+  - [x] 항목 클릭 → 해당 상태로 다중 Undo/Redo 이동 (NavigateHistoryCommand)
+  - [x] Clear 버튼으로 히스토리 전체 삭제
+
+### Phase 18: Whisper 음성 인식 자동 자막 (예정)
+
+- [ ] Rust whisper.cpp FFI 바인딩 또는 OpenAI Whisper API 연동
+- [ ] 백그라운드 스레드 처리 + 진행률 표시
+- [ ] 언어 선택 (한국어/영어/자동)
+- [ ] 결과 → SubtitleClipModel 자동 생성 + 타임라인 배치
+- [ ] CompositeAction으로 Undo/Redo 지원
+
+### Phase 19: Compositor — 레이어 합성 (예정)
+
+- [ ] BlendMode enum (Normal, Multiply, Screen, Overlay, Add, Subtract 등)
+- [ ] Rust compositor.rs — 두 RGBA 레이어 픽셀 단위 합성
+- [ ] Opacity 키프레임 연동 (기존 OpacityKeyframes 활용)
+- [ ] Inspector Effects 탭에 Blend Mode 드롭다운 추가
+- [ ] FFI: renderer_set_clip_blend_mode()
+
 ### Phase 3: 렌더링 파이프라인 & 타임라인 리디자인 - ✅ 완료
 
 #### Phase 3A: 렌더링 파이프라인 재설계 (2026-02-11~13) - ✅ 완료
@@ -1310,7 +1361,97 @@ build-and-copy-dll.bat debug log    # debug + debug_log
 - StatDisplayControl (상태 표시 컨트롤)
 - PreviewSettings 서비스 추가
 
-## 16. 참고 자료
+## 16. Phase 16: 트랜지션 UI 시스템 + 플레이헤드 버그 수정 (2026-02-17) ✅
+
+### 16.1 TransitionType 모델
+
+**파일:** `VortexCut.Core/Models/ClipModel.cs`
+
+```csharp
+public enum TransitionType
+{
+    None = 0,       // 트랜지션 없음
+    Crossfade = 1,  // 알파 페이드
+    FadeBlack = 2,  // 검은색을 거쳐 페이드
+    WipeLeft = 3,   // ← 방향 와이프
+    WipeRight = 4,  // → 방향 와이프
+    WipeUp = 5,     // ↑ 방향 와이프
+    WipeDown = 6    // ↓ 방향 와이프
+}
+
+// ClipModel: incoming 클립(뒤쪽)에 적용
+public TransitionType TransitionType { get; set; } = TransitionType.None;
+```
+
+### 16.2 트랜지션 존 시각화
+
+**파일:** `ClipCanvasPanel.ClipRendering.cs` — `DrawTransitionZones()`
+
+- 같은 비디오 트랙에서 **겹치는 클립 쌍** 감지
+- 겹침 영역: 반투명 녹색 배경 `Color.FromArgb(80, 100, 220, 100)`
+- 대각선 줄무늬 패턴 (10px 간격, 1.5px 펜)
+- 타입 라벨: `XFADE`, `FTB`, `WIPE←`, `WIPE→`, `WIPE↑`, `WIPE↓` (40px 이상 너비)
+
+### 16.3 드래그 완료 시 자동 Crossfade
+
+**파일:** `ClipCanvasPanel.Input.cs` — `CheckAndApplyOverlapTransition()`
+
+드래그 완료(OnPointerReleased) 후 호출:
+1. 같은 트랙의 인접 클립 쌍 검사
+2. 겹침 감지 → incoming 클립 TransitionType = Crossfade 자동 설정
+3. `SetTransitionAction` 생성 → Undo/Redo 스택에 기록
+
+**오디오 동기화:** `ApplyAudioCrossfadeForOverlap()`
+- 겹침 길이 = 크로스페이드 구간
+- 연결된 오디오 클립에 FadeOut / FadeIn 자동 적용
+
+### 16.4 Undo/Redo 지원: SetTransitionAction
+
+**파일:** `VortexCut.UI/Services/Actions/ClipActions.cs`
+
+```csharp
+public class SetTransitionAction : IUndoableAction
+{
+    public void Execute() {
+        _clip.TransitionType = _newType;
+        _projectService.SetClipTransition(_clip.Id, _newType);
+        _projectService.ClearRenderCache();
+    }
+    public void Undo() {
+        _clip.TransitionType = _oldType;
+        _projectService.SetClipTransition(_clip.Id, _oldType);
+        _projectService.ClearRenderCache();
+    }
+}
+```
+
+### 16.5 우클릭 컨텍스트 메뉴
+
+**파일:** `ClipCanvasPanel.Input.cs` — `GetTransitionZoneAtPosition()` + `ShowClipContextMenu()`
+
+겹침 영역 우클릭 → "Transition Type" 서브메뉴 (7가지) + 현재 타입 체크마크 표시
+
+### 16.6 버그 수정
+
+| 버그 | 원인 | 수정 파일 |
+|------|------|-----------|
+| TimelineHeader 플레이헤드 미갱신 | PropertyChanged 구독 누락 | TimelineHeader.cs |
+| 역방향 스크럽 후 재생 시 타임라인 미갱신 | `_lastTimelineUpdateMs` 미초기화 | PreviewViewModel.cs |
+
+**수정 패턴:**
+```csharp
+// TimelineHeader.cs: PropertyChanged 구독 추가
+_viewModel.PropertyChanged += (_, e) => {
+    if (e.PropertyName is nameof(TimelineViewModel.CurrentTimeMs)
+        or nameof(TimelineViewModel.IsPlaying))
+        Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Render);
+};
+
+// PreviewViewModel.cs: TogglePlayback 시 쓰로틀 리셋
+_lastTimelineUpdateMs = 0;  // 재생 시작 시 강제 갱신 보장
+```
+
+## 17. 참고 자료
 
 ### 공식 문서
 - [Rust FFI Omnibus](http://jakegoulding.com/rust-ffi-omnibus/)
@@ -1331,6 +1472,7 @@ build-and-copy-dll.bat debug log    # debug + debug_log
 
 ---
 
-**마지막 업데이트**: 2026-02-17 (Phase 15 완료: FFmpeg Seek 수정 + Proxy + 디버그 로그 매크로)
+**마지막 업데이트**: 2026-02-17 (Phase 16 완료: 트랜지션 UI + 플레이헤드 버그 수정)
 **작성자**: Claude Sonnet 4.5 / Claude Opus 4.6
-**Phase 15 내용**: FFmpeg seek AV_TIME_BASE 버그 수정, Proxy 프리뷰, DLL 3중 배포, debug_log! 조건부 컴파일, build-and-copy-dll.bat 개선
+**Phase 16 내용**: TransitionType 7종, 겹침 시각화(DrawTransitionZones), 자동 Crossfade, 오디오 동기화, 우클릭 메뉴, SetTransitionAction Undo/Redo, Inspector 탭, 플레이헤드 버그 2건 수정
+**다음 예정**: Phase 17 (Undo/Redo 전체 시스템) → Phase 18 (Whisper 자막) → Phase 19 (Compositor)

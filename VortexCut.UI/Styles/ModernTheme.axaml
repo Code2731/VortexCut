@@ -87,6 +87,32 @@
     </Style>
 
     <!-- ========================================
+         HEADER TAB BUTTON (Inspector PROPS/HISTORY)
+         ======================================== -->
+    <Style Selector="Button.HeaderTab">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        <Setter Property="CornerRadius" Value="2"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.HeaderTab:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource BgDarkBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+    </Style>
+
+    <Style Selector="Button.HeaderTabActive">
+        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="CornerRadius" Value="2"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.HeaderTabActive:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+    </Style>
+
+    <!-- ========================================
          TOOLBAR BUTTON (Premiere Pro Style)
          ======================================== -->
     <Style Selector="Button.ToolButton">

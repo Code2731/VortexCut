@@ -161,6 +161,11 @@ public partial class TimelineViewModel : ViewModelBase
     public IProjectService ProjectServiceRef => _projectService;
 
     /// <summary>
+    /// 히스토리 패널용 항목 목록 (오래된 순 → 최신 → Redo 항목)
+    /// </summary>
+    public ObservableCollection<HistoryEntry> HistoryEntries { get; } = new();
+
+    /// <summary>
     /// 타임라인 총 길이 표시 (MM:SS 형식)
     /// </summary>
     public string TotalDurationDisplay
@@ -199,10 +204,13 @@ public partial class TimelineViewModel : ViewModelBase
         _projectService = projectService;
         _undoRedoService = new UndoRedoService();
 
-        // Undo/Redo 후 렌더 캐시 클리어
+        // Undo/Redo 후 렌더 캐시 클리어 + 메뉴 활성화 상태 갱신 + 히스토리 패널 갱신
         _undoRedoService.OnHistoryChanged = () =>
         {
             _projectService.ClearRenderCache();
+            UndoCommand.NotifyCanExecuteChanged();
+            RedoCommand.NotifyCanExecuteChanged();
+            RefreshHistoryEntries();
         };
 
         // Clips 컬렉션 변경 시 StatusBar 프로퍼티 갱신
@@ -373,21 +381,78 @@ public partial class TimelineViewModel : ViewModelBase
     /// <summary>
     /// Undo (Ctrl+Z) — 드래그/트림 중에는 차단
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanUndoAction))]
     public void Undo()
     {
         if (IsEditing) return;
         _undoRedoService.Undo();
     }
+    private bool CanUndoAction() => !IsEditing && _undoRedoService.CanUndo;
 
     /// <summary>
     /// Redo (Ctrl+Shift+Z / Ctrl+Y) — 드래그/트림 중에는 차단
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRedoAction))]
     public void Redo()
     {
         if (IsEditing) return;
         _undoRedoService.Redo();
+    }
+    private bool CanRedoAction() => !IsEditing && _undoRedoService.CanRedo;
+
+    /// <summary>
+    /// 히스토리 항목 클릭 시 해당 상태로 Undo/Redo 이동
+    /// </summary>
+    [RelayCommand]
+    public void NavigateHistory(HistoryEntry entry)
+    {
+        if (IsEditing || entry.Steps == 0) return;
+
+        if (entry.State == HistoryEntryState.Executed)
+        {
+            for (int i = 0; i < entry.Steps; i++)
+                _undoRedoService.Undo();
+        }
+        else
+        {
+            for (int i = 0; i < entry.Steps; i++)
+                _undoRedoService.Redo();
+        }
+    }
+
+    /// <summary>
+    /// 히스토리 전체 삭제 커맨드
+    /// </summary>
+    [RelayCommand]
+    public void ClearHistory()
+    {
+        _undoRedoService.Clear();
+    }
+
+    /// <summary>
+    /// HistoryEntries 갱신 (OnHistoryChanged 콜백에서 호출)
+    /// Undo 스택: [newest, ..., oldest] → 오래된 것부터 표시
+    /// Redo 스택: [next, ..., last] → 순서대로 표시 (회색)
+    /// </summary>
+    private void RefreshHistoryEntries()
+    {
+        HistoryEntries.Clear();
+
+        var undoItems = _undoRedoService.GetUndoItems();
+        var redoItems = _undoRedoService.GetRedoItems();
+
+        // Undo 항목: 오래된 것부터 위에 표시 (undoItems[N-1] = 가장 오래됨)
+        // Steps = arrayIdx (그 항목까지 Undo할 횟수)
+        int n = undoItems.Count;
+        for (int displayIdx = 0; displayIdx < n; displayIdx++)
+        {
+            int arrayIdx = n - 1 - displayIdx;  // 오래된 순
+            HistoryEntries.Add(new HistoryEntry(undoItems[arrayIdx], HistoryEntryState.Executed, arrayIdx));
+        }
+
+        // Redo 항목: 다음 Redo부터 순서대로 (회색 표시)
+        for (int i = 0; i < redoItems.Count; i++)
+            HistoryEntries.Add(new HistoryEntry(redoItems[i], HistoryEntryState.Redoable, i + 1));
     }
 
     [RelayCommand]

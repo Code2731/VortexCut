@@ -14,7 +14,13 @@ public partial class InspectorView : UserControl
     private Panel? _colorPanel;
     private Panel? _audioPanel;
     private Panel? _effectsPanel;
+    private Panel? _historyPanel;
     private TextBlock? _workspaceTitle;
+
+    // 히스토리 탭 버튼
+    private Button? _propertiesTabBtn;
+    private Button? _historyTabBtn;
+    private bool _isHistoryMode;
 
     // Color 편집 컨트롤
     private Controls.PropertyEditorControl? _brightnessEditor;
@@ -78,7 +84,10 @@ public partial class InspectorView : UserControl
         _colorPanel = this.FindControl<Panel>("ColorPanel");
         _audioPanel = this.FindControl<Panel>("AudioPanel");
         _effectsPanel = this.FindControl<Panel>("EffectsPanel");
+        _historyPanel = this.FindControl<Panel>("HistoryPanel");
         _workspaceTitle = this.FindControl<TextBlock>("WorkspaceTitle");
+        _propertiesTabBtn = this.FindControl<Button>("PropertiesTabBtn");
+        _historyTabBtn = this.FindControl<Button>("HistoryTabBtn");
 
         if (DataContext is MainViewModel mainVm)
         {
@@ -102,12 +111,25 @@ public partial class InspectorView : UserControl
         var mainVm = DataContext as MainViewModel;
         if (mainVm == null) return;
 
+        // 히스토리 모드이면 히스토리 패널만 표시
+        if (_isHistoryMode)
+        {
+            if (_propertiesPanel != null) _propertiesPanel.IsVisible = false;
+            if (_colorPanel != null) _colorPanel.IsVisible = false;
+            if (_audioPanel != null) _audioPanel.IsVisible = false;
+            if (_effectsPanel != null) _effectsPanel.IsVisible = false;
+            if (_historyPanel != null) _historyPanel.IsVisible = true;
+            if (_workspaceTitle != null) _workspaceTitle.Text = "HISTORY";
+            return;
+        }
+
         var workspace = mainVm.ActiveWorkspace;
 
         if (_propertiesPanel != null) _propertiesPanel.IsVisible = workspace == "Editing";
         if (_colorPanel != null) _colorPanel.IsVisible = workspace == "Color";
         if (_audioPanel != null) _audioPanel.IsVisible = workspace == "Audio";
         if (_effectsPanel != null) _effectsPanel.IsVisible = workspace == "Effects";
+        if (_historyPanel != null) _historyPanel.IsVisible = false;
 
         // 워크스페이스 전환 시 활성 패널 슬라이더 재동기화
         switch (workspace)
@@ -129,6 +151,50 @@ public partial class InspectorView : UserControl
                 _ => workspace.ToUpper()
             };
         }
+    }
+
+    // ==================== History 탭 ====================
+
+    private void OnPropertiesTabClick(object? sender, RoutedEventArgs e)
+    {
+        _isHistoryMode = false;
+        SetTabActiveState(false);
+        UpdateWorkspacePanel();
+    }
+
+    private void OnHistoryTabClick(object? sender, RoutedEventArgs e)
+    {
+        _isHistoryMode = true;
+        SetTabActiveState(true);
+        UpdateWorkspacePanel();
+    }
+
+    private void SetTabActiveState(bool historyActive)
+    {
+        if (_propertiesTabBtn != null)
+        {
+            _propertiesTabBtn.Classes.Remove("HeaderTabActive");
+            _propertiesTabBtn.Classes.Remove("HeaderTab");
+            _propertiesTabBtn.Classes.Add(historyActive ? "HeaderTab" : "HeaderTabActive");
+        }
+        if (_historyTabBtn != null)
+        {
+            _historyTabBtn.Classes.Remove("HeaderTabActive");
+            _historyTabBtn.Classes.Remove("HeaderTab");
+            _historyTabBtn.Classes.Add(historyActive ? "HeaderTabActive" : "HeaderTab");
+        }
+    }
+
+    private void OnHistoryItemClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn) return;
+        if (btn.DataContext is not Services.HistoryEntry entry) return;
+        (DataContext as MainViewModel)?.Timeline.NavigateHistoryCommand.Execute(entry);
+    }
+
+    private void OnClearHistoryClick(object? sender, RoutedEventArgs e)
+    {
+        (DataContext as MainViewModel)?.Timeline.ClearHistoryCommand.Execute(null);
     }
 
     private void OnTimelinePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

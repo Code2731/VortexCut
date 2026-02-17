@@ -9,8 +9,22 @@
              x:DataType="vm:MainViewModel">
 
     <Grid RowDefinitions="Auto, *">
-        <!-- 워크스페이스 이름 헤더 -->
-        <controls:PanelHeaderControl x:Name="HeaderControl" Title="PROPERTIES"/>
+        <!-- 워크스페이스 이름 헤더 + HISTORY 탭 토글 -->
+        <Border Classes="PanelHeader">
+            <Grid ColumnDefinitions="*, Auto">
+                <TextBlock x:Name="WorkspaceTitle" Classes="PanelTitle"
+                           Text="PROPERTIES" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            Spacing="2" VerticalAlignment="Center" Margin="0,0,4,0">
+                    <Button x:Name="PropertiesTabBtn" Content="PROPS"
+                            Classes="HeaderTabActive" FontSize="10" Padding="6,2"
+                            Click="OnPropertiesTabClick"/>
+                    <Button x:Name="HistoryTabBtn" Content="HISTORY"
+                            Classes="HeaderTab" FontSize="10" Padding="6,2"
+                            Click="OnHistoryTabClick"/>
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <!-- ==================== Editing: Properties ==================== -->
         <Panel x:Name="PropertiesPanel" Grid.Row="1" IsVisible="True" Background="{StaticResource BgPanelBrush}">
@@ -305,6 +319,58 @@
                             FontSize="11"/>
                 </StackPanel>
             </ScrollViewer>
+        </Panel>
+
+        <!-- ==================== History Panel ==================== -->
+        <Panel x:Name="HistoryPanel" Grid.Row="1" IsVisible="False" Background="{StaticResource BgPanelBrush}">
+            <Grid RowDefinitions="Auto, *">
+                <!-- 히스토리 패널 툴바 -->
+                <Border Grid.Row="0" Background="{StaticResource BgDarkBrush}"
+                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                        Padding="8,4">
+                    <Grid ColumnDefinitions="*, Auto">
+                        <TextBlock Text="작업 기록" FontSize="11"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="ClearHistoryBtn" Grid.Column="1"
+                                Content="Clear" FontSize="10" Padding="8,2"
+                                Click="OnClearHistoryClick"/>
+                    </Grid>
+                </Border>
+
+                <!-- 히스토리 목록 -->
+                <ScrollViewer Grid.Row="1" x:Name="HistoryScrollViewer">
+                    <ItemsControl x:Name="HistoryItemsControl"
+                                  ItemsSource="{Binding Timeline.HistoryEntries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button x:Name="HistoryItemBtn"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="10,4"
+                                        Opacity="{Binding DisplayOpacity}"
+                                        Click="OnHistoryItemClick">
+                                    <Grid ColumnDefinitions="16,*">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding BulletChar}"
+                                                   FontSize="9"
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Description}"
+                                                   FontSize="11"
+                                                   FontWeight="{Binding FontWeightStr}"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
         </Panel>
     </Grid>
 </UserControl>
