@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using VortexCut.Core.Models;
 using VortexCut.UI.ViewModels;
 
@@ -40,9 +41,23 @@ public class TimelineHeader : Control
 
     public void SetViewModel(TimelineViewModel viewModel)
     {
+        if (_viewModel != null)
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+
         _viewModel = viewModel;
         // 마커 추가/삭제 시 자동 새로고침
         _viewModel.Markers.CollectionChanged += (s, e) => InvalidateVisual();
+        // CurrentTimeMs 변경 시 Playhead 삼각형 갱신
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TimelineViewModel.CurrentTimeMs)
+            || e.PropertyName == nameof(TimelineViewModel.IsPlaying))
+        {
+            Dispatcher.UIThread.Post(InvalidateVisual, Avalonia.Threading.DispatcherPriority.Render);
+        }
     }
 
     public void SetZoom(double pixelsPerMs)

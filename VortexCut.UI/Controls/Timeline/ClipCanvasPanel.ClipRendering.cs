@@ -396,12 +396,6 @@ public partial class ClipCanvasPanel
             DrawEffectBadges(context, clip, clipRect);
         }
 
-        // 클립 전환 효과 오버레이 (페이드 인/아웃 시각화)
-        if (width > 30)
-        {
-            DrawTransitionOverlay(context, clipRect);
-        }
-
         // 뮤트/비활성 클립 오버레이 (줄무늬 패턴)
         if (shouldDimClip)
         {
@@ -788,53 +782,126 @@ public partial class ClipCanvasPanel
     }
 
     /// <summary>
-    /// 클립 전환 효과 오버레이 (페이드 인/아웃 시각화)
+    /// 트랜지션 존 시각화 — 같은 트랙에서 겹치는 비디오 클립 쌍의 오버랩 영역 렌더링
     /// </summary>
-    private void DrawTransitionOverlay(DrawingContext context, Rect clipRect)
+    private void DrawTransitionZones(DrawingContext context)
     {
-        const double fadeWidth = 15;
+        int videoTrackCount = _videoTracks.Count;
+        double viewLeft = XToTime(-50);
+        double viewRight = XToTime(Bounds.Width + 50);
 
-        // 페이드 인 (좌측)
-        var fadeInRect = new Rect(clipRect.X, clipRect.Y, fadeWidth, clipRect.Height);
-        context.FillRectangle(RenderResourceCache.TransitionFadeInGradient, fadeInRect);
-
-        var fadeInIconGeometry = new StreamGeometry();
-        using (var ctx = fadeInIconGeometry.Open())
+        for (int trackIdx = 0; trackIdx < videoTrackCount; trackIdx++)
         {
-            double iconX = clipRect.X + 3;
-            double iconY = clipRect.Y + clipRect.Height / 2;
-            ctx.BeginFigure(new Point(iconX, iconY - 3), true);
-            ctx.LineTo(new Point(iconX + 5, iconY));
-            ctx.LineTo(new Point(iconX, iconY + 3));
-            ctx.EndFigure(true);
+            var track = _videoTracks[trackIdx];
+            var trackClips = _clips
+                .Where(c => c.TrackIndex == trackIdx && !(c is SubtitleClipModel))
+                .OrderBy(c => c.StartTimeMs)
+                .ToList();
+
+            for (int i = 0; i < trackClips.Count - 1; i++)
+            {
+                var outgoing = trackClips[i];
+                var incoming = trackClips[i + 1];
+
+                long overlapStart = incoming.StartTimeMs;
+                long overlapEnd = outgoing.StartTimeMs + outgoing.DurationMs;
+                if (overlapStart >= overlapEnd) continue;
+
+                // 뷰포트 밖 스킵
+                if (overlapEnd < viewLeft || overlapStart > viewRight) continue;
+
+                double zoneX = TimeToX(overlapStart);
+                double zoneWidth = DurationToWidth(overlapEnd - overlapStart);
+                double zoneY = GetTrackYPosition(trackIdx);
+                double zoneHeight = track.Height - 10;
+                var zoneRect = new Rect(zoneX, zoneY + 5, Math.Max(zoneWidth, 4), zoneHeight);
+
+                DrawTransitionZoneBlock(context, zoneRect, incoming.TransitionType);
+            }
         }
-        context.DrawGeometry(
-            RenderResourceCache.GetSolidBrush(Color.FromArgb(120, 255, 255, 255)),
-            RenderResourceCache.GetPen(Color.FromArgb(180, 255, 255, 255), 0.8),
-            fadeInIconGeometry);
+    }
 
-        // 페이드 아웃 (우측)
-        var fadeOutRect = new Rect(
-            clipRect.Right - fadeWidth,
-            clipRect.Y,
-            fadeWidth,
-            clipRect.Height);
-        context.FillRectangle(RenderResourceCache.TransitionFadeOutGradient, fadeOutRect);
+    /// <summary>
+    /// 개별 트랜지션 존 블록 렌더링 (대각선 줄무늬 + 타입 라벨)
+    /// </summary>
+    private void DrawTransitionZoneBlock(DrawingContext context, Rect zoneRect, TransitionType transitionType)
+    {
+        bool hasTransition = transitionType != TransitionType.None;
 
-        var fadeOutIconGeometry = new StreamGeometry();
-        using (var ctx = fadeOutIconGeometry.Open())
+        // 배경
+        var bgColor = hasTransition
+            ? Color.FromArgb(80, 100, 220, 100)
+            : Color.FromArgb(60, 100, 100, 100);
+        context.FillRectangle(RenderResourceCache.GetSolidBrush(bgColor), zoneRect);
+
+        // 대각선 줄무늬 패턴
+        var stripePen = hasTransition
+            ? RenderResourceCache.GetPen(Color.FromArgb(100, 80, 200, 80), 1.5)
+            : RenderResourceCache.GetPen(Color.FromArgb(60, 150, 150, 150), 1.5);
+
+        using (context.PushClip(zoneRect))
         {
-            double iconX = clipRect.Right - 8;
-            double iconY = clipRect.Y + clipRect.Height / 2;
-            ctx.BeginFigure(new Point(iconX + 5, iconY - 3), true);
-            ctx.LineTo(new Point(iconX, iconY));
-            ctx.LineTo(new Point(iconX + 5, iconY + 3));
-            ctx.EndFigure(true);
+            for (double sx = zoneRect.Left - zoneRect.Height; sx < zoneRect.Right; sx += 10)
+            {
+                context.DrawLine(stripePen,
+                    new Point(sx, zoneRect.Bottom),
+                    new Point(sx + zoneRect.Height, zoneRect.Top));
+            }
         }
-        context.DrawGeometry(
-            RenderResourceCache.GetSolidBrush(Color.FromArgb(120, 255, 255, 255)),
-            RenderResourceCache.GetPen(Color.FromArgb(180, 255, 255, 255), 0.8),
-            fadeOutIconGeometry);
+
+        // 테두리
+        var borderPen = hasTransition
+            ? RenderResourceCache.GetPen(Color.FromArgb(180, 80, 220, 80), 1.5)
+            : RenderResourceCache.GetPen(Color.FromArgb(120, 150, 150, 150), 1);
+        context.DrawRectangle(borderPen, zoneRect);
+
+        // 트랜지션 타입 라벨
+        if (zoneRect.Width > 40 && hasTransition)
+        {
+            string label = transitionType switch
+            {
+                TransitionType.Crossfade => "XFADE",
+                TransitionType.FadeBlack => "FTB",
+                TransitionType.WipeLeft  => "WIPE\u2190",
+                TransitionType.WipeRight => "WIPE\u2192",
+                TransitionType.WipeUp    => "WIPE\u2191",
+                TransitionType.WipeDown  => "WIPE\u2193",
+                _ => "T"
+            };
+
+            var labelText = new FormattedText(
+                label,
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                RenderResourceCache.SegoeUIBold,
+                9,
+                RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 200, 255, 200)));
+
+            var labelBgRect = new Rect(
+                zoneRect.X + (zoneRect.Width - labelText.Width) / 2 - 3,
+                zoneRect.Y + (zoneRect.Height - labelText.Height) / 2 - 1,
+                labelText.Width + 6,
+                labelText.Height + 2);
+            context.FillRectangle(
+                RenderResourceCache.GetSolidBrush(Color.FromArgb(180, 0, 0, 0)),
+                labelBgRect);
+            context.DrawText(labelText,
+                new Point(zoneRect.X + (zoneRect.Width - labelText.Width) / 2,
+                          zoneRect.Y + (zoneRect.Height - labelText.Height) / 2));
+        }
+        else if (zoneRect.Width >= 12)
+        {
+            var tText = new FormattedText(
+                "T",
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                RenderResourceCache.SegoeUIBold,
+                9,
+                RenderResourceCache.GetSolidBrush(Color.FromArgb(200, 200, 255, 200)));
+            context.DrawText(tText,
+                new Point(zoneRect.X + (zoneRect.Width - tText.Width) / 2,
+                          zoneRect.Y + (zoneRect.Height - tText.Height) / 2));
+        }
     }
 
     /// <summary>

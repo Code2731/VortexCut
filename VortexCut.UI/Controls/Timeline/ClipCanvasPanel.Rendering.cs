@@ -122,6 +122,9 @@ public partial class ClipCanvasPanel
         // 클립들
         DrawClips(context);
 
+        // 트랜지션 존 오버레이 (겹치는 비디오 클립 쌍 시각화)
+        DrawTransitionZones(context);
+
         // 트림 중 고스트 아웃라인 (원본 범위 표시)
         if (_isTrimming && _draggingClip != null && _draggingClip.SourceDurationMs > 0)
         {

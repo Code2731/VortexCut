@@ -647,6 +647,7 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
             _useA = true; // 더블 버퍼 상태 리셋 (스크럽↔재생 전환 시 꼬임 방지)
             _lastSyncLogMs = 0; _syncLogCounter = 0; // 동기화 진단 초기화
             _renderDiagCount = 0; _renderDiagTotalMs = 0;
+            _lastTimelineUpdateMs = 0; // 타임라인 갱신 쓰로틀 리셋 (뒤로 스크럽 후 재생 시 갱신 안되는 버그 방지)
 
             // ── ScrubRenderLoop 취소 + Renderer Mutex 릴리스 대기 ──
             // ScrubRenderLoop이 원거리 seek 중이면 Renderer Mutex를 1.2~2초 보유

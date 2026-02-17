@@ -482,6 +482,9 @@ public partial class ClipCanvasPanel
                     _draggingClip.StartTimeMs, _draggingClip.TrackIndex,
                     _viewModel.ProjectServiceRef);
                 _viewModel.UndoRedo.RecordAction(moveAction);
+
+                // 드래그 완료 후 겹침 감지 → 트랜지션 자동 설정
+                CheckAndApplyOverlapTransition(_draggingClip);
             }
         }
 
@@ -664,6 +667,52 @@ public partial class ClipCanvasPanel
         var selectAllItem = new MenuItem { Header = "Select All", InputGesture = new KeyGesture(Key.A, KeyModifiers.Control) };
         selectAllItem.Click += (_, _) => _viewModel.SelectAllClips();
         menu.Items.Add(selectAllItem);
+
+        // 트랜지션 존 우클릭: 트랜지션 타입 변경 서브메뉴
+        var (_, transitionClip) = GetTransitionZoneAtPosition(point);
+        if (transitionClip != null)
+        {
+            menu.Items.Add(new Separator());
+            var transitionMenu = new MenuItem { Header = "Transition Type" };
+
+            var transitionTypes = new (string label, TransitionType type)[]
+            {
+                ("None",               TransitionType.None),
+                ("Crossfade",          TransitionType.Crossfade),
+                ("Fade through Black", TransitionType.FadeBlack),
+                ("Wipe Left",          TransitionType.WipeLeft),
+                ("Wipe Right",         TransitionType.WipeRight),
+                ("Wipe Up",            TransitionType.WipeUp),
+                ("Wipe Down",          TransitionType.WipeDown),
+            };
+
+            foreach (var (label, tType) in transitionTypes)
+            {
+                var capturedType = tType;
+                var capturedClip = transitionClip;
+                var item = new MenuItem
+                {
+                    Header = capturedClip.TransitionType == capturedType
+                        ? $"\u2713 {label}" : label
+                };
+
+                item.Click += (_, _) =>
+                {
+                    if (_viewModel == null) return;
+                    var oldType = capturedClip.TransitionType;
+                    if (oldType == capturedType) return;
+                    var action = new SetTransitionAction(
+                        capturedClip, oldType, capturedType, _viewModel.ProjectServiceRef);
+                    action.Execute();
+                    _viewModel.UndoRedo.RecordAction(action);
+                    InvalidateVisual();
+                };
+
+                transitionMenu.Items.Add(item);
+            }
+
+            menu.Items.Add(transitionMenu);
+        }
 
         this.ContextMenu = menu;
         menu.Open(this);
@@ -1003,5 +1052,118 @@ public partial class ClipCanvasPanel
         {
             Interlocked.Exchange(ref _scrubGridRenderActive, 0);
         }
+    }
+
+    /// <summary>
+    /// 드래그 완료 후 같은 트랙에서 겹치는 인접 클립 쌍 감지 → incoming 클립에 Crossfade 자동 설정
+    /// </summary>
+    private void CheckAndApplyOverlapTransition(ClipModel movedClip)
+    {
+        if (_viewModel == null) return;
+
+        int trackIdx = movedClip.TrackIndex;
+        if (trackIdx >= _videoTracks.Count) return; // 비디오 트랙만
+
+        var trackClips = _clips
+            .Where(c => c.TrackIndex == trackIdx && !(c is SubtitleClipModel))
+            .OrderBy(c => c.StartTimeMs)
+            .ToList();
+
+        for (int i = 0; i < trackClips.Count - 1; i++)
+        {
+            var outgoing = trackClips[i];
+            var incoming = trackClips[i + 1];
+
+            if (incoming.StartTimeMs >= outgoing.StartTimeMs + outgoing.DurationMs) continue;
+
+            // movedClip이 이 쌍에 포함되는지 확인
+            if (movedClip != outgoing && movedClip != incoming) continue;
+
+            // incoming 클립에 Crossfade 자동 설정 (아직 None일 때만)
+            if (incoming.TransitionType == TransitionType.None)
+            {
+                var action = new SetTransitionAction(
+                    incoming,
+                    TransitionType.None,
+                    TransitionType.Crossfade,
+                    _viewModel.ProjectServiceRef);
+                action.Execute();
+                _viewModel.UndoRedo.RecordAction(action);
+            }
+
+            // 오디오 크로스페이드 적용
+            ApplyAudioCrossfadeForOverlap(outgoing, incoming);
+            break;
+        }
+    }
+
+    /// <summary>
+    /// 비디오 트랜지션 존에 맞춰 링크된 오디오 클립에 크로스페이드 적용
+    /// </summary>
+    private void ApplyAudioCrossfadeForOverlap(ClipModel outgoing, ClipModel incoming)
+    {
+        if (_viewModel == null) return;
+
+        long overlapMs = (outgoing.StartTimeMs + outgoing.DurationMs) - incoming.StartTimeMs;
+        if (overlapMs <= 0) return;
+
+        // outgoing 오디오: FadeOut 설정
+        if (outgoing.LinkedAudioClipId.HasValue)
+        {
+            var outAudio = _clips.FirstOrDefault(c => c.Id == outgoing.LinkedAudioClipId.Value);
+            if (outAudio != null && outAudio.FadeOutMs < overlapMs)
+            {
+                outAudio.FadeOutMs = overlapMs;
+                _viewModel.ProjectServiceRef.SetClipFade(outAudio.Id, outAudio.FadeInMs, overlapMs);
+            }
+        }
+
+        // incoming 오디오: FadeIn 설정
+        if (incoming.LinkedAudioClipId.HasValue)
+        {
+            var inAudio = _clips.FirstOrDefault(c => c.Id == incoming.LinkedAudioClipId.Value);
+            if (inAudio != null && inAudio.FadeInMs < overlapMs)
+            {
+                inAudio.FadeInMs = overlapMs;
+                _viewModel.ProjectServiceRef.SetClipFade(inAudio.Id, overlapMs, inAudio.FadeOutMs);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 주어진 좌표가 트랜지션 존 안에 있는지 확인
+    /// </summary>
+    private (ClipModel? outgoing, ClipModel? incoming) GetTransitionZoneAtPosition(Point point)
+    {
+        int videoTrackCount = _videoTracks.Count;
+
+        for (int trackIdx = 0; trackIdx < videoTrackCount; trackIdx++)
+        {
+            var track = _videoTracks[trackIdx];
+            var trackClips = _clips
+                .Where(c => c.TrackIndex == trackIdx && !(c is SubtitleClipModel))
+                .OrderBy(c => c.StartTimeMs)
+                .ToList();
+
+            for (int i = 0; i < trackClips.Count - 1; i++)
+            {
+                var outgoing = trackClips[i];
+                var incoming = trackClips[i + 1];
+
+                long overlapStart = incoming.StartTimeMs;
+                long overlapEnd = outgoing.StartTimeMs + outgoing.DurationMs;
+                if (overlapStart >= overlapEnd) continue;
+
+                double zoneX = TimeToX(overlapStart);
+                double zoneWidth = DurationToWidth(overlapEnd - overlapStart);
+                double zoneY = GetTrackYPosition(trackIdx);
+                double zoneHeight = track.Height - 10;
+                var zoneRect = new Rect(zoneX, zoneY + 5, Math.Max(zoneWidth, 4), zoneHeight);
+
+                if (zoneRect.Contains(point))
+                    return (outgoing, incoming);
+            }
+        }
+        return (null, null);
     }
 }

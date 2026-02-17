@@ -210,3 +210,42 @@ public class TrimClipAction : IUndoableAction
         _projectService?.SyncClipToRust(_clip);
     }
 }
+
+/// <summary>
+/// 클립 트랜지션 타입 변경 액션 (Undo/Redo 지원)
+/// </summary>
+public class SetTransitionAction : IUndoableAction
+{
+    private readonly ClipModel _clip;
+    private readonly IProjectService? _projectService;
+    private readonly TransitionType _oldType;
+    private readonly TransitionType _newType;
+
+    public string Description => "트랜지션 설정";
+
+    public SetTransitionAction(
+        ClipModel clip,
+        TransitionType oldType,
+        TransitionType newType,
+        IProjectService? projectService = null)
+    {
+        _clip = clip;
+        _oldType = oldType;
+        _newType = newType;
+        _projectService = projectService;
+    }
+
+    public void Execute()
+    {
+        _clip.TransitionType = _newType;
+        _projectService?.SetClipTransition(_clip.Id, _newType);
+        _projectService?.ClearRenderCache();
+    }
+
+    public void Undo()
+    {
+        _clip.TransitionType = _oldType;
+        _projectService?.SetClipTransition(_clip.Id, _oldType);
+        _projectService?.ClearRenderCache();
+    }
+}
