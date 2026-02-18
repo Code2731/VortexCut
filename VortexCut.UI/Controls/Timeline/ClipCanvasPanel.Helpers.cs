@@ -24,13 +24,34 @@ public partial class ClipCanvasPanel
         return (long)((x + _scrollOffsetX) / _pixelsPerMs);
     }
 
+    // 트랙 순서: V1 → 자막(S1) → V2~V6 → A1~A4
+    // 자막을 V1 바로 아래에 배치하여 영상-자막 편집 편의성 향상
+    private int V1Count => _videoTracks.Count > 0 ? 1 : 0;
+
     private double GetTrackYPosition(int trackIndex)
     {
         double y = 0;
         int idx = 0;
+        int v1 = V1Count;
 
-        // 비디오 트랙
-        for (int i = 0; i < _videoTracks.Count; i++)
+        // V1
+        for (int i = 0; i < v1; i++)
+        {
+            if (idx == trackIndex) return y;
+            y += _videoTracks[i].Height;
+            idx++;
+        }
+
+        // 자막 트랙 (V1 바로 아래)
+        for (int i = 0; i < _subtitleTracks.Count; i++)
+        {
+            if (idx == trackIndex) return y;
+            y += _subtitleTracks[i].Height;
+            idx++;
+        }
+
+        // V2~V6
+        for (int i = v1; i < _videoTracks.Count; i++)
         {
             if (idx == trackIndex) return y;
             y += _videoTracks[i].Height;
@@ -45,29 +66,32 @@ public partial class ClipCanvasPanel
             idx++;
         }
 
-        // 자막 트랙
-        for (int i = 0; i < _subtitleTracks.Count; i++)
-        {
-            if (idx == trackIndex) return y;
-            y += _subtitleTracks[i].Height;
-            idx++;
-        }
-
         return y;
     }
 
     private TrackModel? GetTrackByIndex(int index)
     {
-        if (index < _videoTracks.Count)
-            return _videoTracks[index];
+        int v1 = V1Count;
+        int idx = 0;
 
-        int audioIndex = index - _videoTracks.Count;
-        if (audioIndex >= 0 && audioIndex < _audioTracks.Count)
-            return _audioTracks[audioIndex];
+        // V1
+        if (v1 > 0 && index == idx) return _videoTracks[0];
+        idx += v1;
 
-        int subtitleIndex = index - _videoTracks.Count - _audioTracks.Count;
-        if (subtitleIndex >= 0 && subtitleIndex < _subtitleTracks.Count)
-            return _subtitleTracks[subtitleIndex];
+        // 자막 트랙
+        if (index >= idx && index < idx + _subtitleTracks.Count)
+            return _subtitleTracks[index - idx];
+        idx += _subtitleTracks.Count;
+
+        // V2~V6
+        int v2Count = _videoTracks.Count - v1;
+        if (index >= idx && index < idx + v2Count)
+            return _videoTracks[v1 + (index - idx)];
+        idx += v2Count;
+
+        // 오디오 트랙
+        if (index >= idx && index < idx + _audioTracks.Count)
+            return _audioTracks[index - idx];
 
         return null;
     }
@@ -75,32 +99,42 @@ public partial class ClipCanvasPanel
     private int GetTrackIndexAtY(double y)
     {
         double currentY = 0;
+        int idx = 0;
+        int v1 = V1Count;
 
-        // 비디오 트랙 검사
-        for (int i = 0; i < _videoTracks.Count; i++)
+        // V1
+        for (int i = 0; i < v1; i++)
         {
-            if (y >= currentY && y < currentY + _videoTracks[i].Height)
-                return i;
+            if (y >= currentY && y < currentY + _videoTracks[i].Height) return idx;
             currentY += _videoTracks[i].Height;
+            idx++;
         }
 
-        // 오디오 트랙 검사
-        for (int i = 0; i < _audioTracks.Count; i++)
-        {
-            if (y >= currentY && y < currentY + _audioTracks[i].Height)
-                return _videoTracks.Count + i;
-            currentY += _audioTracks[i].Height;
-        }
-
-        // 자막 트랙 검사
+        // 자막 트랙
         for (int i = 0; i < _subtitleTracks.Count; i++)
         {
-            if (y >= currentY && y < currentY + _subtitleTracks[i].Height)
-                return _videoTracks.Count + _audioTracks.Count + i;
+            if (y >= currentY && y < currentY + _subtitleTracks[i].Height) return idx;
             currentY += _subtitleTracks[i].Height;
+            idx++;
         }
 
-        return 0; // 기본값
+        // V2~V6
+        for (int i = v1; i < _videoTracks.Count; i++)
+        {
+            if (y >= currentY && y < currentY + _videoTracks[i].Height) return idx;
+            currentY += _videoTracks[i].Height;
+            idx++;
+        }
+
+        // 오디오 트랙
+        for (int i = 0; i < _audioTracks.Count; i++)
+        {
+            if (y >= currentY && y < currentY + _audioTracks[i].Height) return idx;
+            currentY += _audioTracks[i].Height;
+            idx++;
+        }
+
+        return 0;
     }
 
     /// <summary>

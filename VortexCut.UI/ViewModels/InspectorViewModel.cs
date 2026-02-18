@@ -1,3 +1,4 @@
+using System.Linq;
 using VortexCut.Core.Interfaces;
 using VortexCut.Core.Models;
 
@@ -161,6 +162,21 @@ public class InspectorViewModel
         clip.Style.Position = SubtitlePosition.Bottom;
         clip.Style.IsBold = false;
         clip.Style.IsItalic = false;
+        _preview.RefreshSubtitleOverlay();
+    }
+
+    /// <summary>
+    /// 현재 스타일을 모든 자막 클립에 일괄 적용
+    /// </summary>
+    public void ApplySubtitleStyleToAll(double fontSize, SubtitlePosition position, bool isBold, bool isItalic)
+    {
+        foreach (var clip in _timeline.Clips.OfType<SubtitleClipModel>())
+        {
+            clip.Style.FontSize = fontSize;
+            clip.Style.Position = position;
+            clip.Style.IsBold = isBold;
+            clip.Style.IsItalic = isItalic;
+        }
         _preview.RefreshSubtitleOverlay();
     }
 

@@ -1,8 +1,8 @@
 # VortexCut 기술 명세서 (Technical Specification)
 
-> **작성일**: 2026-02-17
-> **버전**: 0.16.0 (트랜지션 UI 시스템 + 플레이헤드 버그 수정)
-> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절, 워크스페이스 전환, Proxy 프리뷰, 트랜지션 UI
+> **작성일**: 2026-02-19
+> **버전**: 0.18.0 (Whisper 자동 자막 + Undo/Redo 시스템)
+> **상태**: 비디오/오디오 동기 재생, MP4 Export, 자막, 색보정 이펙트, Clip Monitor, 오디오 이펙트, 속도 조절, 워크스페이스 전환, Proxy 프리뷰, 트랜지션 UI, Undo/Redo, Whisper 자동 자막
 
 ## 1. 개요
 
@@ -799,13 +799,22 @@ dotnet build VortexCut.sln -c Release
   - [x] 항목 클릭 → 해당 상태로 다중 Undo/Redo 이동 (NavigateHistoryCommand)
   - [x] Clear 버튼으로 히스토리 전체 삭제
 
-### Phase 18: Whisper 음성 인식 자동 자막 (예정)
+### Phase 18: Whisper 음성 인식 자동 자막 — ✅ 완료
 
-- [ ] Rust whisper.cpp FFI 바인딩 또는 OpenAI Whisper API 연동
-- [ ] 백그라운드 스레드 처리 + 진행률 표시
-- [ ] 언어 선택 (한국어/영어/자동)
-- [ ] 결과 → SubtitleClipModel 자동 생성 + 타임라인 배치
-- [ ] CompositeAction으로 Undo/Redo 지원
+- [x] Rust whisper-rs 0.14 FFI 바인딩 (whisper.cpp 네이티브)
+  - `transcription/mod.rs`: `extract_audio_16k_mono()` + `start_transcription()`
+  - `ffi/transcriber.rs`: C FFI (start/progress/finished/error/segments/destroy)
+- [x] 백그라운드 스레드 처리 + 진행률 표시 (AtomicU32 폴링 패턴)
+- [x] 언어 선택 (자동/한국어/영어/일본어/중국어/스페인어/프랑스어/독일어)
+- [x] 모델 선택 UI (ComboBox: base/small/medium/large 자동 스캔 + 찾아보기)
+- [x] 결과 → SubtitleClipModel 자동 생성 + 타임라인 배치
+- [x] CompositeAction으로 Undo/Redo 지원
+- [x] 자막 TrackIndex 글로벌 인덱스 버그 수정 (ImportSrt/ImportWhisper/ExportSrt)
+- [x] 클립 없을 때 파일 선택 다이얼로그 폴백
+
+**미구현 버튼 (백로그)**:
+- [ ] ProgramMonitor: Settings 버튼 (Kind="Cog") — 프리뷰 설정 다이얼로그
+- [ ] ProgramMonitor: Fullscreen 버튼 (Kind="Fullscreen") — 전체화면 프리뷰
 
 ### Phase 19: Compositor — 레이어 합성 (예정)
 
@@ -1472,7 +1481,7 @@ _lastTimelineUpdateMs = 0;  // 재생 시작 시 강제 갱신 보장
 
 ---
 
-**마지막 업데이트**: 2026-02-17 (Phase 16 완료: 트랜지션 UI + 플레이헤드 버그 수정)
+**마지막 업데이트**: 2026-02-19 (Phase 18 완료: Whisper 자동 자막)
 **작성자**: Claude Sonnet 4.5 / Claude Opus 4.6
-**Phase 16 내용**: TransitionType 7종, 겹침 시각화(DrawTransitionZones), 자동 Crossfade, 오디오 동기화, 우클릭 메뉴, SetTransitionAction Undo/Redo, Inspector 탭, 플레이헤드 버그 2건 수정
-**다음 예정**: Phase 17 (Undo/Redo 전체 시스템) → Phase 18 (Whisper 자막) → Phase 19 (Compositor)
+**Phase 18 내용**: whisper-rs 0.14 FFI, 모델 선택 UI, 언어 선택 8종, 자막 TrackIndex 글로벌 인덱스 버그 수정, 클립 없을 때 파일 선택 폴백
+**다음 예정**: Phase 19 (Compositor 레이어 합성)

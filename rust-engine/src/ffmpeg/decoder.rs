@@ -126,7 +126,15 @@ impl Decoder {
     fn open_internal(file_path: &Path, target_width: u32, target_height: u32, high_quality: bool, yuv_output: bool) -> Result<Self, String> {
         ffmpeg::init().map_err(|e| format!("FFmpeg init failed: {}", e))?;
 
+        // 1차 시도: 기본 오픈
+        // 2차 시도: moov atom이 파일 끝에 있는 경우 (카메라 녹화본 등) — probesize 확장
         let input_ctx = ffmpeg::format::input(&file_path)
+            .or_else(|_| {
+                let mut opts = ffmpeg::Dictionary::new();
+                opts.set("probesize", "100000000");   // 100MB
+                opts.set("analyzeduration", "30000000"); // 30초
+                ffmpeg::format::input_with_dictionary(&file_path, opts)
+            })
             .map_err(|e| format!("Failed to open file: {}", e))?;
 
         let video_stream = input_ctx

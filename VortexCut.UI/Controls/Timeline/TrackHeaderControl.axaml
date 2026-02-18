@@ -154,13 +154,18 @@
                 <!-- Display Mode 버튼 (클릭 → Filmstrip/Thumbnail/Minimal 순환) -->
                 <Border Grid.Row="3"
                         Name="DisplayModeButton"
-                        Height="12"
+                        Height="18"
+                        Margin="0,0,0,2"
                         Cursor="Hand"
-                        Background="Transparent"
-                        ToolTip.Tip="Click to change display mode">
+                        CornerRadius="3"
+                        BorderThickness="1"
+                        BorderBrush="#505052"
+                        Background="#3D3D40"
+                        ToolTip.Tip="Click to change display mode (Filmstrip / Thumbnail / Minimal)">
                     <TextBlock Name="DisplayModeLabel"
                                FontSize="8"
-                               Foreground="#888888"
+                               FontWeight="Bold"
+                               Foreground="#AAAAAA"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
                                Text="FILM"/>

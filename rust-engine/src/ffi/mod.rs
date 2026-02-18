@@ -8,6 +8,7 @@ pub mod exporter;
 pub mod audio;
 pub mod thumbnail;
 pub mod audio_playback;
+pub mod transcriber;
 
 use std::ffi::CString;
 use std::os::raw::c_char;

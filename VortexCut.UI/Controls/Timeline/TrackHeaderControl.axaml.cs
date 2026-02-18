@@ -107,10 +107,20 @@ public partial class TrackHeaderControl : UserControl
         _colorPopup = this.FindControl<Avalonia.Controls.Primitives.Popup>("ColorPopup");
         _colorGrid = this.FindControl<Avalonia.Controls.Primitives.UniformGrid>("ColorGrid");
 
-        // Display Mode 버튼 클릭
+        // Display Mode 버튼 클릭 + 호버 효과
         if (_displayModeButton != null)
         {
             _displayModeButton.PointerPressed += OnDisplayModePressed;
+            _displayModeButton.PointerEntered += (_, _) =>
+            {
+                _displayModeButton.Background = new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x52));
+                if (_displayModeLabel != null) _displayModeLabel.Foreground = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD));
+            };
+            _displayModeButton.PointerExited += (_, _) =>
+            {
+                _displayModeButton.Background = new SolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x40));
+                if (_displayModeLabel != null) _displayModeLabel.Foreground = new SolidColorBrush(Color.FromRgb(0xAA, 0xAA, 0xAA));
+            };
         }
 
         // 리사이즈 그립 이벤트
@@ -167,6 +177,12 @@ public partial class TrackHeaderControl : UserControl
         if (mainWindow?.DataContext is MainViewModel mainVm)
         {
             mainVm.Timeline.ProjectServiceRef.SetTrackMuted(Track.Id, Track.IsMuted);
+
+            // 자막 트랙 뮤트 시 미리보기 자막 즉시 갱신
+            if (Track.Type == TrackType.Subtitle)
+            {
+                mainVm.Preview.RefreshSubtitleOverlay();
+            }
         }
     }
 

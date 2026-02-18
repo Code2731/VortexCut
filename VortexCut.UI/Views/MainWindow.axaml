@@ -14,7 +14,8 @@
         Width="1600" Height="900"
         MinWidth="1024" MinHeight="600"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource BgBaseBrush}">
+        Background="{StaticResource BgBaseBrush}"
+        Icon="/Assets/app.ico">
 
     <Window.KeyBindings>
         <KeyBinding Gesture="Space" Command="{Binding PlayPauseCommand}"/>
@@ -66,6 +67,14 @@
                         <Separator/>
                         <MenuItem Header="Show Timeline" InputGesture="T"/>
                         <MenuItem Header="Show Inspector" InputGesture="I"/>
+                    </MenuItem>
+                    <MenuItem Header="Tools">
+                        <MenuItem Header="Auto Subtitle (Whisper)..."
+                                  Command="{Binding AutoSubtitleCommand}"/>
+                        <Separator/>
+                        <MenuItem Header="Import SRT..."
+                                  Command="{Binding ImportSrtFileCommand}"
+                                  InputGesture="Ctrl+Shift+I"/>
                     </MenuItem>
                     <MenuItem Header="Help">
                         <MenuItem Header="Documentation"/>

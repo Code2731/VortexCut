@@ -279,7 +279,7 @@ public partial class InspectorView : UserControl
                 SetSliderValue(_opacityEditor?.Slider, opacity);
 
                 if (_trackIndexValueText != null)
-                    _trackIndexValueText.Text = clip.TrackIndex < 10 ? $"V{clip.TrackIndex + 1}" : $"A{clip.TrackIndex - 9}";
+                    _trackIndexValueText.Text = GetTrackLabel(clip);
             }
 
             UpdatePropertiesValueTexts();
@@ -288,6 +288,19 @@ public partial class InspectorView : UserControl
         {
             _isUpdatingSliders = false;
         }
+    }
+
+    /// <summary>
+    /// 트랙 순서: V1(0) → S1(1) → V2~V6(2~6) → A1~A4(7~10)
+    /// </summary>
+    private static string GetTrackLabel(ClipModel clip)
+    {
+        if (clip is SubtitleClipModel) return "S1";
+        int idx = clip.TrackIndex;
+        if (idx == 0) return "V1";           // V1
+        if (idx >= 2 && idx <= 6) return $"V{idx}"; // V2~V6
+        if (idx >= 7) return $"A{idx - 6}";  // A1~A4
+        return $"T{idx}";
     }
 
     private void UpdatePropertiesValueTexts()
@@ -653,6 +666,9 @@ public partial class InspectorView : UserControl
         if (_boldToggle != null) _boldToggle.IsCheckedChanged += OnSubtitleStyleToggleChanged;
         if (_italicToggle != null) _italicToggle.IsCheckedChanged += OnSubtitleStyleToggleChanged;
 
+        var applyToAllButton = this.FindControl<Button>("ApplyToAllSubtitleButton");
+        if (applyToAllButton != null) applyToAllButton.Click += OnApplySubtitleStyleToAllClick;
+
         var resetSubtitleButton = this.FindControl<Button>("ResetSubtitleButton");
         if (resetSubtitleButton != null) resetSubtitleButton.Click += OnResetSubtitleClick;
     }
@@ -742,6 +758,19 @@ public partial class InspectorView : UserControl
 
         UpdateFontSizeValueText();
         inspectorVm.ApplySubtitleStyle(subtitleClip, fontSize, position, isBold, isItalic);
+    }
+
+    private void OnApplySubtitleStyleToAllClick(object? sender, RoutedEventArgs e)
+    {
+        var inspectorVm = GetInspectorVm();
+        if (inspectorVm == null) return;
+
+        double fontSize = _fontSizeSlider?.Value ?? 48;
+        var position = (SubtitlePosition)(_subtitlePositionComboBox?.SelectedIndex ?? 2);
+        bool isBold = _boldToggle?.IsChecked ?? false;
+        bool isItalic = _italicToggle?.IsChecked ?? false;
+
+        inspectorVm.ApplySubtitleStyleToAll(fontSize, position, isBold, isItalic);
     }
 
     private void OnResetSubtitleClick(object? sender, RoutedEventArgs e)

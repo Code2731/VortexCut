@@ -884,9 +884,20 @@ public partial class TimelineViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// 자막 트랙 로컬 인덱스 → 글로벌 트랙 인덱스 변환
+    /// 트랙 레이아웃: V1(0) → S1(1) → S2(2) → V2 → V3 → ... → A1 → A2 ...
+    /// </summary>
+    public int GetSubtitleTrackGlobalIndex(int subtitleLocalIndex = 0)
+    {
+        // V1Count (첫 번째 비디오 트랙) + 자막 로컬 인덱스
+        int v1Count = VideoTracks.Count > 0 ? 1 : 0;
+        return v1Count + subtitleLocalIndex;
+    }
+
+    /// <summary>
     /// SRT 파일 임포트 → 자막 클립 생성
     /// </summary>
-    public void ImportSrt(string filePath, int trackIndex = 0)
+    public void ImportSrt(string filePath, int subtitleTrackLocalIndex = 0)
     {
         var entries = SrtParser.Parse(filePath);
         if (entries.Count == 0) return;
@@ -894,6 +905,9 @@ public partial class TimelineViewModel : ViewModelBase
         // 자막 트랙이 없으면 추가
         if (SubtitleTracks.Count == 0)
             AddSubtitleTrack();
+
+        // 로컬 → 글로벌 인덱스 변환
+        int globalTrackIndex = GetSubtitleTrackGlobalIndex(subtitleTrackLocalIndex);
 
         var actions = new List<Core.Interfaces.IUndoableAction>();
         foreach (var entry in entries)
@@ -903,7 +917,7 @@ public partial class TimelineViewModel : ViewModelBase
                 entry.StartMs,
                 entry.EndMs - entry.StartMs,
                 entry.Text,
-                trackIndex);
+                globalTrackIndex);
 
             actions.Add(new Services.Actions.AddSubtitleClipAction(Clips, clip));
         }
@@ -915,13 +929,51 @@ public partial class TimelineViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 자막 클립 → SRT 파일 내보내기
+    /// Whisper 세그먼트 → 자막 클립 임포트 (ImportSrt와 동일한 흐름)
     /// </summary>
-    public void ExportSrt(string filePath, int trackIndex = 0)
+    public void ImportWhisperSegments(
+        System.Collections.Generic.List<VortexCut.Core.Services.SubtitleEntry> entries,
+        int subtitleTrackLocalIndex = 0)
     {
+        if (entries == null || entries.Count == 0) return;
+
+        // 자막 트랙이 없으면 추가
+        if (SubtitleTracks.Count == 0)
+            AddSubtitleTrack();
+
+        // 로컬 → 글로벌 인덱스 변환
+        int globalTrackIndex = GetSubtitleTrackGlobalIndex(subtitleTrackLocalIndex);
+
+        var actions = new List<Core.Interfaces.IUndoableAction>();
+        foreach (var entry in entries)
+        {
+            var clip = new SubtitleClipModel(
+                _nextSubtitleClipId++,
+                entry.StartMs,
+                entry.EndMs - entry.StartMs,
+                entry.Text,
+                globalTrackIndex);
+
+            actions.Add(new Services.Actions.AddSubtitleClipAction(Clips, clip));
+        }
+
+        if (actions.Count == 1)
+            _undoRedoService.ExecuteAction(actions[0]);
+        else
+            _undoRedoService.ExecuteAction(
+                new Services.Actions.CompositeAction("Whisper 자동 자막", actions));
+    }
+
+    /// <summary>
+    /// 자막 클립 → SRT 파일 내보내기
+    /// subtitleTrackLocalIndex: 자막 트랙 로컬 인덱스 (0-based)
+    /// </summary>
+    public void ExportSrt(string filePath, int subtitleTrackLocalIndex = 0)
+    {
+        int globalTrackIndex = GetSubtitleTrackGlobalIndex(subtitleTrackLocalIndex);
         var subtitleClips = Clips
             .OfType<SubtitleClipModel>()
-            .Where(c => c.TrackIndex == trackIndex)
+            .Where(c => c.TrackIndex == globalTrackIndex)
             .OrderBy(c => c.StartTimeMs)
             .ToList();
 
@@ -933,14 +985,39 @@ public partial class TimelineViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 특정 시간에 표시할 자막 텍스트 가져오기
+    /// 특정 시간에 표시할 자막 텍스트 가져오기 (뮤트 트랙 제외)
     /// </summary>
     public string? GetSubtitleTextAt(long timeMs)
     {
         return Clips
             .OfType<SubtitleClipModel>()
-            .FirstOrDefault(c => timeMs >= c.StartTimeMs && timeMs < c.EndTimeMs)
+            .Where(c => timeMs >= c.StartTimeMs && timeMs < c.EndTimeMs)
+            .Where(c => !IsSubtitleTrackMuted(c))
+            .FirstOrDefault()
             ?.Text;
+    }
+
+    /// <summary>
+    /// 특정 시간에 표시 중인 자막 클립의 스타일 가져오기 (없으면 null, 뮤트 트랙 제외)
+    /// </summary>
+    public VortexCut.Core.Models.SubtitleStyle? GetSubtitleStyleAt(long timeMs)
+    {
+        return Clips
+            .OfType<SubtitleClipModel>()
+            .Where(c => timeMs >= c.StartTimeMs && timeMs < c.EndTimeMs)
+            .Where(c => !IsSubtitleTrackMuted(c))
+            .FirstOrDefault()
+            ?.Style;
+    }
+
+    /// <summary>
+    /// 자막 클립이 속한 트랙이 뮤트 상태인지 확인
+    /// </summary>
+    private bool IsSubtitleTrackMuted(SubtitleClipModel clip)
+    {
+        // SubtitleTracks는 자막 트랙 목록. 클립의 TrackIndex로 해당 트랙 찾기
+        // 현재 S1 트랙 하나만 존재하므로 SubtitleTracks[0] 사용
+        return SubtitleTracks.Count > 0 && SubtitleTracks[0].IsMuted;
     }
 
     /// <summary>

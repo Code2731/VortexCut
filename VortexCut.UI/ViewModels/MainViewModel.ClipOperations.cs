@@ -123,4 +123,22 @@ public partial class MainViewModel
         // MainWindow에서 다이얼로그 열기
         RequestOpenExportDialog?.Invoke();
     }
+
+    /// <summary>
+    /// Whisper 자동 자막 다이얼로그 열기 요청 (MainWindow에서 핸들링)
+    /// </summary>
+    public Action? RequestOpenWhisperDialog { get; set; }
+
+    [RelayCommand]
+    private void AutoSubtitle()
+    {
+        // 타임라인에 미디어 클립이 없으면 경고
+        if (Timeline.Clips.Count == 0)
+        {
+            _toastService?.ShowError("자동 자막 불가", "타임라인에 클립이 없습니다.");
+            return;
+        }
+
+        RequestOpenWhisperDialog?.Invoke();
+    }
 }

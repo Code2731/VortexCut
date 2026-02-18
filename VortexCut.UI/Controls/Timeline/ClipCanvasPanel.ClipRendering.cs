@@ -153,8 +153,8 @@ public partial class ClipCanvasPanel
         {
             context.FillRectangle(gradientBrush, clipRect);
 
-            // 비디오 클립 썸네일 (Medium LOD에서도 표시)
-            if (!isAudioClip && _thumbnailStripService != null && displayMode != ClipDisplayMode.Thumbnail)
+            // 비디오 클립 썸네일 (Medium LOD에서도 표시, 자막 클립 제외)
+            if (!isAudioClip && !isSubtitleClip && _thumbnailStripService != null && displayMode != ClipDisplayMode.Thumbnail)
             {
                 var tier = ThumbnailStripService.GetTierForZoom(_pixelsPerMs);
                 var previewPath = string.IsNullOrEmpty(clip.ProxyFilePath)
@@ -167,7 +167,7 @@ public partial class ClipCanvasPanel
                     DrawThumbnailStrip(context, strip, clipRect, clip);
                 }
             }
-            else if (!isAudioClip && _thumbnailStripService != null && displayMode == ClipDisplayMode.Thumbnail)
+            else if (!isAudioClip && !isSubtitleClip && _thumbnailStripService != null && displayMode == ClipDisplayMode.Thumbnail)
             {
                 DrawHeadTailThumbnails(context, clip, clipRect);
             }
@@ -221,8 +221,8 @@ public partial class ClipCanvasPanel
 
         context.FillRectangle(gradientBrush, clipRect);
 
-        // 비디오 클립 + LOD Full/Medium일 때 썸네일 렌더링
-        if (!isAudioClip && _thumbnailStripService != null && displayMode != ClipDisplayMode.Thumbnail)
+        // 비디오 클립 + LOD Full/Medium일 때 썸네일 렌더링 (자막 클립 제외)
+        if (!isAudioClip && !isSubtitleClip && _thumbnailStripService != null && displayMode != ClipDisplayMode.Thumbnail)
         {
             var tier = ThumbnailStripService.GetTierForZoom(_pixelsPerMs);
             var previewPath = string.IsNullOrEmpty(clip.ProxyFilePath)
@@ -236,7 +236,7 @@ public partial class ClipCanvasPanel
                 DrawThumbnailStrip(context, strip, clipRect, clip);
             }
         }
-        else if (!isAudioClip && _thumbnailStripService != null && displayMode == ClipDisplayMode.Thumbnail)
+        else if (!isAudioClip && !isSubtitleClip && _thumbnailStripService != null && displayMode == ClipDisplayMode.Thumbnail)
         {
             DrawHeadTailThumbnails(context, clip, clipRect);
         }

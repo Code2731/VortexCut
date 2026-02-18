@@ -15,6 +15,8 @@ log = "0.4"
 env_logger = "0.11"
 # 실시간 오디오 출력 (WASAPI on Windows)
 cpal = "0.15"
+# Whisper 음성 인식 (자동 자막)
+whisper-rs = "0.14"
 
 [features]
 debug_log = []  # cargo build --release --features debug_log 로 로그 활성화

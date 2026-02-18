@@ -1,0 +1,111 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:VortexCut.UI.ViewModels"
+        x:Class="VortexCut.UI.Views.WhisperDialogView"
+        x:DataType="vm:WhisperDialogViewModel"
+        Title="자동 자막 생성 (Whisper)"
+        Width="480" Height="340"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E2E">
+
+    <Window.Styles>
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="#CDD6F4"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="#313244"/>
+            <Setter Property="Foreground" Value="#CDD6F4"/>
+            <Setter Property="BorderBrush" Value="#45475A"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="#313244"/>
+            <Setter Property="Foreground" Value="#CDD6F4"/>
+            <Setter Property="BorderBrush" Value="#45475A"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="Background" Value="#45475A"/>
+            <Setter Property="Foreground" Value="#CDD6F4"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="16,6"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+
+        <!-- 제목 -->
+        <TextBlock Grid.Row="0"
+                   Text="자동 자막 생성 (Whisper AI)"
+                   FontSize="17" FontWeight="Bold"
+                   Margin="0,0,0,14"/>
+
+        <!-- 모델 선택 -->
+        <Grid Grid.Row="1" ColumnDefinitions="90,*" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Text="모델:" VerticalAlignment="Center"/>
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding AvailableModels}"
+                      SelectedItem="{Binding SelectedModel}"
+                      HorizontalAlignment="Stretch"
+                      IsEnabled="{Binding !IsRunning}"/>
+        </Grid>
+
+        <!-- 언어 선택 -->
+        <Grid Grid.Row="2" ColumnDefinitions="90,*" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Text="언어:" VerticalAlignment="Center"/>
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{x:Static vm:WhisperDialogViewModel.LanguageDisplayNames}"
+                      SelectedIndex="{Binding SelectedLanguageIndex}"
+                      HorizontalAlignment="Stretch"
+                      IsEnabled="{Binding !IsRunning}"/>
+        </Grid>
+
+        <!-- 진행률 바 -->
+        <StackPanel Grid.Row="3" Margin="0,4,0,4">
+            <ProgressBar Value="{Binding Progress}"
+                         Minimum="0" Maximum="100"
+                         Height="18"
+                         Foreground="#89B4FA"
+                         Background="#313244"
+                         CornerRadius="4"/>
+        </StackPanel>
+
+        <!-- 상태 텍스트 + 에러 -->
+        <StackPanel Grid.Row="4" Margin="0,2,0,0">
+            <TextBlock Text="{Binding StatusText}"
+                       FontSize="12" Foreground="#A6ADC8"
+                       Margin="0,0,0,4"/>
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="#F38BA8"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding ErrorMessage,
+                                   Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+
+        <!-- 버튼 -->
+        <StackPanel Grid.Row="6"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,8,0,0">
+            <Button Content="시작"
+                    Command="{Binding StartCommand}"
+                    IsVisible="{Binding !IsRunning}"
+                    Background="#89B4FA"
+                    Foreground="#1E1E2E"
+                    FontWeight="Bold"/>
+            <Button Content="취소"
+                    Command="{Binding CancelCommand}"
+                    IsVisible="{Binding IsRunning}"
+                    Background="#F38BA8"
+                    Foreground="#1E1E2E"/>
+            <Button Content="닫기"
+                    Click="OnCloseClick"
+                    IsEnabled="{Binding !IsRunning}"/>
+        </StackPanel>
+    </Grid>
+</Window>

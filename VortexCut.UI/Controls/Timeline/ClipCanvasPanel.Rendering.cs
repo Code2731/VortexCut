@@ -161,177 +161,120 @@ public partial class ClipCanvasPanel
 
     private void DrawTrackBackgrounds(DrawingContext context)
     {
-        // 비디오 트랙
-        for (int i = 0; i < _videoTracks.Count; i++)
+        // 트랙 순서: V1 → 자막(S1) → V2~V6 → A1~A4
+        double currentY = 0;
+        int v1 = V1Count;
+
+        // ─── V1 ───
+        for (int i = 0; i < v1; i++)
         {
             var track = _videoTracks[i];
-            double y = i * track.Height;
-            var trackRect = new Rect(0, y, Bounds.Width, track.Height);
-
-            // 프로페셔널 그라디언트 배경 (교차 패턴) - 캐시된 브러시 사용
-            var isEven = i % 2 == 0;
-            var trackGradient = isEven
-                ? RenderResourceCache.GetVerticalGradient(Color.Parse("#2D2D30"), Color.Parse("#252527"))
-                : RenderResourceCache.GetVerticalGradient(Color.Parse("#252527"), Color.Parse("#1E1E20"));
-
-            context.FillRectangle(trackGradient, trackRect);
-
-            // 미묘한 상단 하이라이트 (3D 효과)
-            if (i > 0)
-            {
-                context.DrawLine(RenderResourceCache.TrackHighlightPen,
-                    new Point(0, y),
-                    new Point(Bounds.Width, y));
-            }
-
+            var trackRect = new Rect(0, currentY, Bounds.Width, track.Height);
+            context.FillRectangle(
+                RenderResourceCache.GetVerticalGradient(Color.Parse("#2D2D30"), Color.Parse("#252527")),
+                trackRect);
             context.DrawRectangle(RenderResourceCache.TrackBorderPen, trackRect);
-
-            // Lock된 트랙 빗금 오버레이
-            if (track.IsLocked)
-            {
-                DrawLockedTrackOverlay(context, trackRect);
-            }
-
-            // Armed 트랙 좌측 주황 바
+            if (track.IsLocked) DrawLockedTrackOverlay(context, trackRect);
             if (track.IsArmed)
-            {
-                var armBar = new Rect(0, y, 3, track.Height);
-                context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 230, 126, 34)), armBar);
-            }
+                context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 230, 126, 34)),
+                    new Rect(0, currentY, 3, track.Height));
+            currentY += track.Height;
         }
 
-        // 비디오/오디오 트랙 경계 구분선
-        double audioStartY = _videoTracks.Sum(t => t.Height);
-        if (_videoTracks.Count > 0 && _audioTracks.Count > 0)
-        {
-            // 구분선: 그림자 → 본체 → 하이라이트
-            context.DrawLine(RenderResourceCache.SeparatorShadowPen,
-                new Point(0, audioStartY + 2),
-                new Point(Bounds.Width, audioStartY + 2));
-
-            context.DrawLine(RenderResourceCache.SeparatorMainPen,
-                new Point(0, audioStartY),
-                new Point(Bounds.Width, audioStartY));
-
-            context.DrawLine(RenderResourceCache.SeparatorHighlightPen,
-                new Point(0, audioStartY - 1),
-                new Point(Bounds.Width, audioStartY - 1));
-
-            // 라벨
-            var videoLabel = new FormattedText(
-                "VIDEO",
-                System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                RenderResourceCache.SegoeUIBold,
-                10,
-                RenderResourceCache.VideoLabelBrush);
-
-            var audioLabel = new FormattedText(
-                "AUDIO",
-                System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                RenderResourceCache.SegoeUIBold,
-                10,
-                RenderResourceCache.AudioLabelBrush);
-
-            // 라벨 배경
-            var videoLabelBg = new Rect(5, audioStartY - 15, videoLabel.Width + 8, 12);
-            context.FillRectangle(RenderResourceCache.LabelBgBrush, videoLabelBg);
-            context.DrawText(videoLabel, new Point(9, audioStartY - 14));
-
-            var audioLabelBg = new Rect(5, audioStartY + 3, audioLabel.Width + 8, 12);
-            context.FillRectangle(RenderResourceCache.LabelBgBrush, audioLabelBg);
-            context.DrawText(audioLabel, new Point(9, audioStartY + 4));
-        }
-
-        // 오디오 트랙
-        for (int i = 0; i < _audioTracks.Count; i++)
-        {
-            var track = _audioTracks[i];
-            double y = audioStartY + i * track.Height;
-            var trackRect = new Rect(0, y, Bounds.Width, track.Height);
-
-            // 오디오 트랙 그라디언트 (캐시)
-            var isEven = i % 2 == 0;
-            var audioTrackGradient = isEven
-                ? RenderResourceCache.GetVerticalGradient(Color.Parse("#252828"), Color.Parse("#1E2120"))
-                : RenderResourceCache.GetVerticalGradient(Color.Parse("#1E2120"), Color.Parse("#181A18"));
-
-            context.FillRectangle(audioTrackGradient, trackRect);
-
-            // 미묘한 상단 하이라이트
-            if (i > 0)
-            {
-                context.DrawLine(RenderResourceCache.TrackHighlightPen,
-                    new Point(0, y),
-                    new Point(Bounds.Width, y));
-            }
-
-            context.DrawRectangle(RenderResourceCache.TrackBorderPen, trackRect);
-
-            // Lock된 트랙 빗금 오버레이
-            if (track.IsLocked)
-            {
-                DrawLockedTrackOverlay(context, trackRect);
-            }
-
-            // Armed 트랙 좌측 주황 바
-            if (track.IsArmed)
-            {
-                var armBar = new Rect(0, y, 3, track.Height);
-                context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 230, 126, 34)), armBar);
-            }
-        }
-
-        // 오디오/자막 트랙 경계 구분선
+        // ─── 자막 트랙 (V1 바로 아래) ───
         if (_subtitleTracks.Count > 0)
         {
-            double subtitleStartY = audioStartY + _audioTracks.Sum(t => t.Height);
+            // V1-자막 얇은 구분선
+            if (v1 > 0)
+                context.DrawLine(RenderResourceCache.SeparatorMainPen,
+                    new Point(0, currentY), new Point(Bounds.Width, currentY));
 
-            // 구분선
-            context.DrawLine(RenderResourceCache.SeparatorMainPen,
-                new Point(0, subtitleStartY),
-                new Point(Bounds.Width, subtitleStartY));
-
-            // SUBTITLE 라벨
-            var subtitleLabel = new FormattedText(
-                "SUBTITLE",
-                System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                RenderResourceCache.SegoeUIBold,
-                10,
-                RenderResourceCache.GetSolidBrush(Color.Parse("#FFC857")));
-
-            var subtitleLabelBg = new Rect(5, subtitleStartY + 3, subtitleLabel.Width + 8, 12);
-            context.FillRectangle(RenderResourceCache.LabelBgBrush, subtitleLabelBg);
-            context.DrawText(subtitleLabel, new Point(9, subtitleStartY + 4));
-
-            // 자막 트랙
             for (int i = 0; i < _subtitleTracks.Count; i++)
             {
                 var track = _subtitleTracks[i];
-                double y = subtitleStartY + i * track.Height;
-                var trackRect = new Rect(0, y, Bounds.Width, track.Height);
-
-                // 자막 트랙 그라디언트 (앰버/골드 톤)
-                var subIsEven = i % 2 == 0;
-                var subtitleTrackGradient = subIsEven
+                var trackRect = new Rect(0, currentY, Bounds.Width, track.Height);
+                var subGradient = i % 2 == 0
                     ? RenderResourceCache.GetVerticalGradient(Color.Parse("#2D2820"), Color.Parse("#252018"))
                     : RenderResourceCache.GetVerticalGradient(Color.Parse("#252018"), Color.Parse("#1E1A12"));
-
-                context.FillRectangle(subtitleTrackGradient, trackRect);
-
+                context.FillRectangle(subGradient, trackRect);
                 if (i > 0)
-                {
                     context.DrawLine(RenderResourceCache.TrackHighlightPen,
-                        new Point(0, y), new Point(Bounds.Width, y));
-                }
-
+                        new Point(0, currentY), new Point(Bounds.Width, currentY));
                 context.DrawRectangle(RenderResourceCache.TrackBorderPen, trackRect);
-
-                if (track.IsLocked)
-                    DrawLockedTrackOverlay(context, trackRect);
+                if (track.IsLocked) DrawLockedTrackOverlay(context, trackRect);
+                currentY += track.Height;
             }
+
+            // 자막-V2 구분선
+            if (_videoTracks.Count > v1)
+                context.DrawLine(RenderResourceCache.SeparatorMainPen,
+                    new Point(0, currentY), new Point(Bounds.Width, currentY));
+        }
+
+        // ─── V2~V6 ───
+        for (int i = v1; i < _videoTracks.Count; i++)
+        {
+            var track = _videoTracks[i];
+            var trackRect = new Rect(0, currentY, Bounds.Width, track.Height);
+            var isEven = i % 2 == 0;
+            context.FillRectangle(isEven
+                ? RenderResourceCache.GetVerticalGradient(Color.Parse("#2D2D30"), Color.Parse("#252527"))
+                : RenderResourceCache.GetVerticalGradient(Color.Parse("#252527"), Color.Parse("#1E1E20")),
+                trackRect);
+            // 자막 구분선 이후 첫 번째 V2 트랙은 상단 하이라이트 없음 (구분선이 이미 있음)
+            if (_subtitleTracks.Count == 0 && i > 0)
+                context.DrawLine(RenderResourceCache.TrackHighlightPen,
+                    new Point(0, currentY), new Point(Bounds.Width, currentY));
+            else if (_subtitleTracks.Count > 0 && i > v1)
+                context.DrawLine(RenderResourceCache.TrackHighlightPen,
+                    new Point(0, currentY), new Point(Bounds.Width, currentY));
+            context.DrawRectangle(RenderResourceCache.TrackBorderPen, trackRect);
+            if (track.IsLocked) DrawLockedTrackOverlay(context, trackRect);
+            if (track.IsArmed)
+                context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 230, 126, 34)),
+                    new Rect(0, currentY, 3, track.Height));
+            currentY += track.Height;
+        }
+
+        // ─── VIDEO/AUDIO 구분선 ───
+        double audioStartY = currentY;
+        if (_videoTracks.Count > 0 && _audioTracks.Count > 0)
+        {
+            context.DrawLine(RenderResourceCache.SeparatorShadowPen,
+                new Point(0, audioStartY + 2), new Point(Bounds.Width, audioStartY + 2));
+            context.DrawLine(RenderResourceCache.SeparatorMainPen,
+                new Point(0, audioStartY), new Point(Bounds.Width, audioStartY));
+            context.DrawLine(RenderResourceCache.SeparatorHighlightPen,
+                new Point(0, audioStartY - 1), new Point(Bounds.Width, audioStartY - 1));
+
+            var videoLabel = new FormattedText("VIDEO", System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight, RenderResourceCache.SegoeUIBold, 10, RenderResourceCache.VideoLabelBrush);
+            var audioLabel = new FormattedText("AUDIO", System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight, RenderResourceCache.SegoeUIBold, 10, RenderResourceCache.AudioLabelBrush);
+            context.FillRectangle(RenderResourceCache.LabelBgBrush, new Rect(5, audioStartY - 15, videoLabel.Width + 8, 12));
+            context.DrawText(videoLabel, new Point(9, audioStartY - 14));
+            context.FillRectangle(RenderResourceCache.LabelBgBrush, new Rect(5, audioStartY + 3, audioLabel.Width + 8, 12));
+            context.DrawText(audioLabel, new Point(9, audioStartY + 4));
+        }
+
+        // ─── 오디오 트랙 ───
+        for (int i = 0; i < _audioTracks.Count; i++)
+        {
+            var track = _audioTracks[i];
+            var trackRect = new Rect(0, currentY, Bounds.Width, track.Height);
+            context.FillRectangle(i % 2 == 0
+                ? RenderResourceCache.GetVerticalGradient(Color.Parse("#252828"), Color.Parse("#1E2120"))
+                : RenderResourceCache.GetVerticalGradient(Color.Parse("#1E2120"), Color.Parse("#181A18")),
+                trackRect);
+            if (i > 0)
+                context.DrawLine(RenderResourceCache.TrackHighlightPen,
+                    new Point(0, currentY), new Point(Bounds.Width, currentY));
+            context.DrawRectangle(RenderResourceCache.TrackBorderPen, trackRect);
+            if (track.IsLocked) DrawLockedTrackOverlay(context, trackRect);
+            if (track.IsArmed)
+                context.FillRectangle(RenderResourceCache.GetSolidBrush(Color.FromArgb(220, 230, 126, 34)),
+                    new Rect(0, currentY, 3, track.Height));
+            currentY += track.Height;
         }
     }
 

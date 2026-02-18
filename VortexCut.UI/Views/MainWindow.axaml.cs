@@ -56,6 +56,9 @@ public partial class MainWindow : Window
             // Export 다이얼로그 열기 콜백
             _viewModel.RequestOpenExportDialog = OpenExportDialog;
 
+            // Whisper 자동 자막 다이얼로그 열기 콜백
+            _viewModel.RequestOpenWhisperDialog = OpenWhisperDialog;
+
             // 워크스페이스 버튼 초기화
             SetupWorkspaceButtons();
 
@@ -358,6 +361,73 @@ public partial class MainWindow : Window
         // 토글: 이미 armed였으면 해제만, 아니었으면 arm
         if (!wasArmed)
             tracks[index].IsArmed = true;
+    }
+
+    /// <summary>
+    /// Whisper 자동 자막 다이얼로그 열기
+    /// 타임라인의 첫 번째 비디오 클립 경로를 기본값으로 사용
+    /// </summary>
+    private async void OpenWhisperDialog()
+    {
+        if (_viewModel == null) return;
+
+        // 타임라인에서 첫 번째 비디오/오디오 클립 경로 탐색
+        string mediaPath = string.Empty;
+        foreach (var clip in _viewModel.Timeline.Clips)
+        {
+            if (!string.IsNullOrEmpty(clip.FilePath))
+            {
+                mediaPath = clip.FilePath;
+                break;
+            }
+        }
+
+        // 타임라인에 클립이 없으면 파일 선택 대화상자
+        if (string.IsNullOrEmpty(mediaPath))
+        {
+            var result = await StorageProvider.OpenFilePickerAsync(
+                new Avalonia.Platform.Storage.FilePickerOpenOptions
+                {
+                    Title = "음성 인식할 미디어 파일 선택",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new Avalonia.Platform.Storage.FilePickerFileType("미디어 파일")
+                        {
+                            Patterns = new[] { "*.mp4", "*.mov", "*.avi", "*.mkv", "*.mp3", "*.wav", "*.aac", "*.m4a" }
+                        }
+                    }
+                });
+            if (result.Count > 0)
+                mediaPath = result[0].Path.LocalPath;
+            else
+                return; // 취소
+        }
+
+        var whisperVm = new VortexCut.UI.ViewModels.WhisperDialogViewModel
+        {
+            MediaPath = mediaPath,
+        };
+
+        // 완료 시: Timeline에 자막 세그먼트 임포트
+        whisperVm.OnTranscribeComplete = segments =>
+        {
+            // 자막 트랙 로컬 인덱스 (0-based) — 첫 번째 자막 트랙 사용
+            _viewModel.Timeline.ImportWhisperSegments(segments, subtitleTrackLocalIndex: 0);
+            _toastService.ShowSuccess(
+                "자동 자막 완료",
+                $"{segments.Count}개 자막이 타임라인에 추가되었습니다.");
+        };
+
+        var dialog = new WhisperDialogView
+        {
+            DataContext = whisperVm
+        };
+
+        // ViewModel에서 닫기 요청 시 실제로 닫음
+        whisperVm.RequestClose = () => dialog.Close();
+
+        await dialog.ShowDialog(this);
     }
 
     /// <summary>

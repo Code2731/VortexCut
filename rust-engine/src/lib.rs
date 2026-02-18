@@ -19,6 +19,7 @@ pub mod encoding;
 pub mod subtitle;
 pub mod utils;
 pub mod audio;
+pub mod transcription;
 
 // FFI 함수들을 최상위에서 재export
 pub use ffi::*;

@@ -279,11 +279,23 @@
                                               HorizontalContentAlignment="Center" VerticalContentAlignment="Center" FontSize="13"/>
                             </StackPanel>
 
-                            <Button x:Name="ResetSubtitleButton"
-                                    Content="Reset Style"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Center"
-                                    FontSize="11"/>
+                            <!-- 스타일 버튼 행 -->
+                            <Grid ColumnDefinitions="*, 8, *">
+                                <Button x:Name="ApplyToAllSubtitleButton"
+                                        Grid.Column="0"
+                                        Content="모든 자막에 적용"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Background="{StaticResource AccentBrush}"
+                                        Foreground="White"
+                                        FontSize="11"/>
+                                <Button x:Name="ResetSubtitleButton"
+                                        Grid.Column="2"
+                                        Content="Reset Style"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        FontSize="11"/>
+                            </Grid>
 
                             <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,4"/>
                         </StackPanel>

@@ -58,7 +58,7 @@ public class TimelineCanvas : Grid
                 _minimap.SetViewModel(_viewModel);
                 _timelineHeader.SetViewModel(_viewModel);
                 _clipCanvasPanel.SetViewModel(_viewModel);
-                _trackListPanel.SetTracks(_viewModel.VideoTracks, _viewModel.AudioTracks);
+                _trackListPanel.SetTracks(_viewModel.VideoTracks, _viewModel.AudioTracks, _viewModel.SubtitleTracks);
                 _clipCanvasPanel.SetTracks(
                     _viewModel.VideoTracks.ToList(),
                     _viewModel.AudioTracks.ToList(),
@@ -207,6 +207,8 @@ public class TimelineCanvas : Grid
             _scrollOffsetX = _scrollViewer.Offset.X;
             _timelineHeader.SetScrollOffset(_scrollOffsetX);
             _clipCanvasPanel.SetScrollOffset(_scrollOffsetX);
+            // 수직 스크롤: TrackListPanel(왼쪽)을 ClipCanvasPanel과 동기화
+            _trackListPanel.SetVerticalOffset(_scrollViewer.Offset.Y);
         }
     }
 
@@ -217,7 +219,7 @@ public class TimelineCanvas : Grid
     {
         if (_viewModel == null) return;
 
-        _trackListPanel.SetTracks(_viewModel.VideoTracks, _viewModel.AudioTracks);
+        _trackListPanel.SetTracks(_viewModel.VideoTracks, _viewModel.AudioTracks, _viewModel.SubtitleTracks);
         _clipCanvasPanel.SetTracks(
             _viewModel.VideoTracks.ToList(),
             _viewModel.AudioTracks.ToList(),

@@ -199,6 +199,26 @@ public partial class ClipCanvasPanel : Control
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// 전체 트랙 높이를 ScrollViewer에 보고 → 수직 스크롤바 활성화
+    /// 가로는 가상 스크롤 유지 (availableSize.Width 그대로 반환)
+    /// </summary>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        double totalHeight = 0;
+        foreach (var t in _videoTracks) totalHeight += t.Height;
+        foreach (var t in _audioTracks) totalHeight += t.Height;
+        foreach (var t in _subtitleTracks) totalHeight += t.Height;
+
+        // Infinity는 Avalonia가 InvalidOperationException을 던지므로 제한
+        double w = double.IsInfinity(availableSize.Width) ? 0 : availableSize.Width;
+        double h = double.IsInfinity(availableSize.Height)
+            ? totalHeight
+            : Math.Max(totalHeight, availableSize.Height);
+
+        return new Size(w, h);
+    }
+
     public void SetThumbnailService(ThumbnailStripService service)
     {
         _thumbnailStripService = service;

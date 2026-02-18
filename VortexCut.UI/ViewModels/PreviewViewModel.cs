@@ -60,6 +60,8 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(CurrentTimeDisplay))]
     [NotifyPropertyChangedFor(nameof(CurrentSubtitleText))]
     [NotifyPropertyChangedFor(nameof(HasSubtitle))]
+    [NotifyPropertyChangedFor(nameof(CurrentSubtitleFontSize))]
+    [NotifyPropertyChangedFor(nameof(CurrentSubtitleFontWeight))]
     private long _currentTimeMs = 0;
 
     /// <summary>
@@ -102,6 +104,18 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     public bool HasSubtitle => CurrentSubtitleText != null;
 
     /// <summary>
+    /// 현재 자막의 폰트 크기 (없으면 기본 20)
+    /// </summary>
+    public double CurrentSubtitleFontSize =>
+        _timelineViewModel?.GetSubtitleStyleAt(CurrentTimeMs)?.FontSize ?? 20;
+
+    /// <summary>
+    /// 현재 자막의 폰트 굵기 ("Bold" / "Normal")
+    /// </summary>
+    public string CurrentSubtitleFontWeight =>
+        (_timelineViewModel?.GetSubtitleStyleAt(CurrentTimeMs)?.IsBold ?? false) ? "Bold" : "Normal";
+
+    /// <summary>
     /// 자막 텍스트/스타일 변경 시 오버레이 강제 갱신
     /// (CurrentTimeMs가 변하지 않아도 프리뷰 자막 표시 업데이트)
     /// </summary>
@@ -109,6 +123,8 @@ public partial class PreviewViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(CurrentSubtitleText));
         OnPropertyChanged(nameof(HasSubtitle));
+        OnPropertyChanged(nameof(CurrentSubtitleFontSize));
+        OnPropertyChanged(nameof(CurrentSubtitleFontWeight));
     }
 
     // 재생 속도 (0.25x ~ 4x)
