@@ -8,6 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ## 프로젝트 개요
+<img width="1602" height="932" alt="VortextCut" src="https://github.com/user-attachments/assets/0fd523d7-9400-4a33-ba21-70df4600eae7" />
 
 VortexCut은 고성능 **Rust 렌더링 엔진**(ffmpeg-next)과 현대적인 **C# Avalonia UI**를 결합한 영상 편집 소프트웨어입니다.
 
